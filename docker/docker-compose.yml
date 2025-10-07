@@ -1,0 +1,85 @@
+services:
+  # Backend API SEDI Tablette
+  sedi-backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: sedi-tablette-backend
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_SERVER=SERVEURERP
+      - DB_DATABASE=SEDI_ERP
+      - DB_USER=QUALITE
+      - DB_PASSWORD=QUALITE
+      - DB_ENCRYPT=false
+      - DB_TRUST_CERT=true
+      - FRONTEND_URL=http://localhost
+      - API_TIMEOUT=30000
+      - API_RETRY_ATTEMPTS=3
+      - CACHE_ENABLED=true
+      - CACHE_TTL=300000
+      - LOG_LEVEL=info
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - SESSION_SECRET=${SESSION_SECRET:-change-me-in-production}
+    ports:
+      - "3000:3000"
+    networks:
+      - sedi-network
+    restart: unless-stopped
+    volumes:
+      - sedi-logs:/app/logs
+      - /etc/localtime:/etc/localtime:ro
+    labels:
+      - "com.sedi.service=backend"
+      - "com.sedi.version=2.1"
+      - "com.sedi.description=SEDI Tablette Backend API with Filters"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Nginx SEDI Tablette
+  sedi-frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: sedi-tablette-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      sedi-backend:
+        condition: service_healthy
+    networks:
+      - sedi-network
+    restart: unless-stopped
+    volumes:
+      - sedi-logs:/var/log/nginx
+      - /etc/localtime:/etc/localtime:ro
+    labels:
+      - "com.sedi.service=frontend"
+      - "com.sedi.version=2.1"
+      - "com.sedi.description=SEDI Tablette Frontend with Advanced Filters"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+networks:
+  sedi-network:
+    name: sedi-tablette-network
+    driver: bridge
+    labels:
+      - "com.sedi.network=main"
+
+volumes:
+  sedi-logs:
+    name: sedi-tablette-logs
+    driver: local
+    labels:
+      - "com.sedi.volume=logs"
+      - "com.sedi.description=Logs centralisés pour SEDI Tablette"

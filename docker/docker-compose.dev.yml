@@ -1,0 +1,84 @@
+services:
+  # Backend SEDI Tablette en mode développement
+  sedi-backend-dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+      target: development
+    container_name: sedi-tablette-backend-dev
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DB_SERVER=SERVEURERP
+      - DB_DATABASE=SEDI_ERP
+      - DB_USER=QUALITE
+      - DB_PASSWORD=QUALITE
+      - DB_ENCRYPT=false
+      - DB_TRUST_CERT=true
+      - FRONTEND_URL=http://localhost:8080
+      - DEBUG=sedi:*
+      - LOG_LEVEL=debug
+      - API_TIMEOUT=30000
+      - CACHE_ENABLED=false
+    ports:
+      - "3000:3000"
+      - "9229:9229"  # Port de debug Node.js
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - sedi-logs-dev:/app/logs
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - sedi-dev-network
+    restart: unless-stopped
+    command: ["npm", "run", "dev"]
+    labels:
+      - "com.sedi.service=backend-dev"
+      - "com.sedi.environment=development"
+      - "com.sedi.version=2.1"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Frontend SEDI Tablette en mode développement
+  sedi-frontend-dev:
+    image: nginx:alpine
+    container_name: sedi-tablette-frontend-dev
+    ports:
+      - "8080:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./docker/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+      - sedi-logs-dev:/var/log/nginx
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      sedi-backend-dev:
+        condition: service_healthy
+    networks:
+      - sedi-dev-network
+    restart: unless-stopped
+    labels:
+      - "com.sedi.service=frontend-dev"
+      - "com.sedi.environment=development"
+      - "com.sedi.version=2.1"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  sedi-dev-network:
+    name: sedi-tablette-dev-network
+    driver: bridge
+    labels:
+      - "com.sedi.network=development"
+
+volumes:
+  sedi-logs-dev:
+    name: sedi-tablette-logs-dev
+    driver: local

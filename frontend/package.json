@@ -1,0 +1,15 @@
+{
+  "name": "sedi-tablette-frontend",
+  "version": "1.0.0",
+  "description": "Interface frontend pour la tablette SEDI",
+  "scripts": {
+    "start": "npx http-server . -p 8080 --cors -o",
+    "dev": "npx http-server . -p 8080 --cors -o"
+  },
+  "keywords": ["sedi", "frontend", "tablette"],
+  "author": "SEDI",
+  "license": "MIT",
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}

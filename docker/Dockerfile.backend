@@ -1,0 +1,56 @@
+# Dockerfile multi-stage pour le backend SEDI Tablette Node.js
+
+# Stage 1: Base image avec dépendances communes
+FROM node:18-alpine AS base
+RUN apk add --no-cache curl dumb-init
+WORKDIR /app
+COPY backend/package*.json ./
+
+# Stage 2: Dependencies (pour le cache des layers)
+FROM base AS dependencies
+RUN npm ci --only=production && npm cache clean --force
+
+# Stage 3: Development
+FROM base AS development
+RUN npm ci && npm cache clean --force
+COPY backend/ ./
+EXPOSE 3000 9229
+USER node
+CMD ["npm", "run", "dev"]
+
+# Stage 4: Production build
+FROM dependencies AS production
+
+# Copier le code source
+COPY backend/ ./
+
+# Créer les répertoires nécessaires
+RUN mkdir -p logs && \
+    chown -R node:node /app
+
+# Utiliser l'utilisateur non-root
+USER node
+
+# Exposer le port
+EXPOSE 3000
+
+# Variables d'environnement par défaut
+ENV NODE_ENV=production \
+    PORT=3000 \
+    DB_SERVER=SERVEURERP \
+    DB_DATABASE=SEDI_ERP \
+    DB_USER=QUALITE \
+    DB_PASSWORD=QUALITE \
+    DB_ENCRYPT=false \
+    DB_TRUST_CERT=true \
+    API_TIMEOUT=30000 \
+    CACHE_ENABLED=true \
+    LOG_LEVEL=info
+
+# Health check optimisé
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:3000/api/health || exit 1
+
+# Utiliser dumb-init pour une gestion propre des signaux
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "server.js"]

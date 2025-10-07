@@ -1,0 +1,23 @@
+{
+  "name": "sedi-tablette",
+  "version": "1.0.0",
+  "description": "Interface tablette pour la gestion des lancements et opérations dans l'ERP SEDI",
+  "scripts": {
+    "start": "npm run start:backend",
+    "start:backend": "cd backend && npm start",
+    "start:frontend": "cd frontend && npm start",
+    "dev": "npm run dev:backend",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev"
+  },
+  "keywords": ["sedi", "erp", "tablette", "interface"],
+  "author": "SEDI",
+  "license": "MIT"
+}
+
+
+
+
+
+
+

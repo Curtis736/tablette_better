@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Affichage Simple - ABHISTORIQUE_OPERATEURS</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 30px; 
+            border-radius: 15px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2); 
+        }
+        h1 { 
+            color: #333; 
+            text-align: center; 
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        .status { 
+            padding: 15px; 
+            margin: 20px 0; 
+            border-radius: 8px; 
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .success { background: #d4edda; color: #155724; border: 2px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 2px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 2px solid #bee5eb; }
+        
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin: 25px 0; 
+            background: white;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        th, td { 
+            padding: 15px; 
+            text-align: left; 
+            border-bottom: 1px solid #ddd; 
+        }
+        th { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: bold; 
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        tr:nth-child(even) { background-color: #f8f9fa; }
+        tr:hover { background-color: #e3f2fd; transition: all 0.3s; }
+        
+        .status-badge { 
+            padding: 6px 12px; 
+            border-radius: 20px; 
+            color: white; 
+            font-size: 12px; 
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .status-DEBUT { background: linear-gradient(45deg, #28a745, #20c997); }
+        .status-PAUSE { background: linear-gradient(45deg, #ffc107, #fd7e14); color: #333; }
+        .status-REPRISE { background: linear-gradient(45deg, #17a2b8, #6f42c1); }
+        .status-TERMINE { background: linear-gradient(45deg, #6c757d, #495057); }
+        
+        .stats { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+            gap: 20px; 
+            margin: 30px 0; 
+        }
+        .stat-card { 
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 20px; 
+            border-radius: 15px; 
+            text-align: center; 
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        .stat-number { 
+            font-size: 36px; 
+            font-weight: bold; 
+            margin-bottom: 10px;
+        }
+        .stat-label {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        button { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; 
+            border: none; 
+            padding: 15px 30px; 
+            border-radius: 25px; 
+            cursor: pointer; 
+            margin: 10px; 
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.3s;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        button:hover { 
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 18px;
+            color: #666;
+        }
+        
+        .highlight {
+            background: linear-gradient(45deg, #ff6b6b, #feca57);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Données ABHISTORIQUE_OPERATEURS</h1>
+        
+        <div style="text-align: center; margin: 30px 0;">
+            <button onclick="chargerDonnees()">🔄 Charger les Données</button>
+            <button onclick="testerConnexion()">🔗 Tester Connexion</button>
+            <button onclick="afficherTout()">📋 Tout Afficher</button>
+        </div>
+        
+        <div id="status" class="status info">
+            Cliquez sur "Charger les Données" pour voir le contenu de la table <span class="highlight">ABHISTORIQUE_OPERATEURS</span>
+        </div>
+        
+        <div class="stats" id="stats" style="display: none;">
+            <div class="stat-card">
+                <div class="stat-number" id="totalOperations">0</div>
+                <div class="stat-label">Opérations Total</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="totalOperateurs">0</div>
+                <div class="stat-label">Opérateurs Uniques</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="totalLancements">0</div>
+                <div class="stat-label">Lancements Uniques</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="totalEvenements">0</div>
+                <div class="stat-label">Types d'Événements</div>
+            </div>
+        </div>
+        
+        <div id="tableContainer" style="display: none;">
+            <h2>📋 Contenu de la Table ABHISTORIQUE_OPERATEURS</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>🆔 ID</th>
+                        <th>👤 Opérateur</th>
+                        <th>🚀 Code Lancement</th>
+                        <th>📂 Rubrique</th>
+                        <th>⚡ Événement</th>
+                        <th>🔧 Phase</th>
+                        <th>📊 Statut</th>
+                        <th>⏰ Heure Début</th>
+                        <th>🏁 Heure Fin</th>
+                        <th>📅 Date</th>
+                    </tr>
+                </thead>
+                <tbody id="dataTableBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let donneesCompletes = [];
+        
+        async function chargerDonnees() {
+            const statusDiv = document.getElementById('status');
+            const statsDiv = document.getElementById('stats');
+            const tableContainer = document.getElementById('tableContainer');
+            
+            statusDiv.className = 'status info';
+            statusDiv.innerHTML = '⏳ Chargement des données de <span class="highlight">ABHISTORIQUE_OPERATEURS</span>...';
+            
+            try {
+                console.log('🔄 Tentative de chargement des données...');
+                
+                // Essayer différents ports et routes
+                let response;
+                let urlUtilisee = '';
+                
+                const urlsATester = [
+                    'http://localhost:8080/api/admin',
+                    'http://localhost:3000/api/admin',
+                    'http://localhost:8080/api/admin/debug/sedi-tables',
+                    'http://localhost:3000/api/admin/debug/sedi-tables'
+                ];
+                
+                for (const url of urlsATester) {
+                    try {
+                        console.log(`🔗 Test de: ${url}`);
+                        response = await fetch(url);
+                        if (response.ok) {
+                            urlUtilisee = url;
+                            console.log(`✅ Connexion réussie via: ${url}`);
+                            break;
+                        }
+                    } catch (error) {
+                        console.log(`❌ Échec: ${url} - ${error.message}`);
+                    }
+                }
+                
+                if (!response || !response.ok) {
+                    throw new Error('Aucune connexion possible aux serveurs');
+                }
+                
+                const data = await response.json();
+                console.log('📊 Données reçues:', data);
+                
+                // Traiter les données selon le type de réponse
+                let operations = [];
+                
+                if (data.operations) {
+                    // Réponse de l'API admin normale
+                    operations = data.operations;
+                } else if (data.tables && data.tables.ABHISTORIQUE_OPERATEURS) {
+                    // Réponse de l'API debug
+                    operations = data.tables.ABHISTORIQUE_OPERATEURS.sample || [];
+                } else {
+                    throw new Error('Format de données non reconnu');
+                }
+                
+                if (operations.length > 0) {
+                    donneesCompletes = operations;
+                    afficherDonnees(operations);
+                    calculerStatistiques(operations);
+                    
+                    statusDiv.className = 'status success';
+                    statusDiv.innerHTML = `✅ <strong>${operations.length} opérations</strong> chargées depuis <span class="highlight">ABHISTORIQUE_OPERATEURS</span><br>📡 Source: ${urlUtilisee}`;
+                    
+                    statsDiv.style.display = 'grid';
+                    tableContainer.style.display = 'block';
+                    
+                } else {
+                    statusDiv.className = 'status error';
+                    statusDiv.innerHTML = '⚠️ Aucune opération trouvée dans <span class="highlight">ABHISTORIQUE_OPERATEURS</span>';
+                }
+                
+            } catch (error) {
+                console.error('❌ Erreur:', error);
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = `❌ <strong>Erreur:</strong> ${error.message}<br>🔧 Vérifiez que les serveurs backend et frontend sont démarrés`;
+            }
+        }
+        
+        function afficherDonnees(operations) {
+            const tableBody = document.getElementById('dataTableBody');
+            tableBody.innerHTML = '';
+            
+            operations.forEach((op, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${op.id || op.NoEnreg || index + 1}</strong></td>
+                    <td><strong>${op.operatorName || op.OperatorCode || op.operatorId || '-'}</strong></td>
+                    <td><span class="highlight">${op.lancementCode || op.CodeLanctImprod || '-'}</span></td>
+                    <td>${op.CodeRubrique || op.operatorId || '-'}</td>
+                    <td><span class="status-badge status-${op.statusCode || op.Ident}">${op.status || op.Ident || '-'}</span></td>
+                    <td>${op.phase || op.Phase || 'PRODUCTION'}</td>
+                    <td>${op.generalStatus || op.Statut || '-'}</td>
+                    <td>${formatTime(op.startTime || op.HeureDebut)}</td>
+                    <td>${formatTime(op.endTime || op.HeureFin)}</td>
+                    <td>${formatDate(op.DateCreation)}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+        
+        function calculerStatistiques(operations) {
+            const operateurs = [...new Set(operations.map(op => 
+                op.operatorName || op.OperatorCode || op.operatorId
+            ).filter(Boolean))];
+            
+            const lancements = [...new Set(operations.map(op => 
+                op.lancementCode || op.CodeLanctImprod
+            ).filter(Boolean))];
+            
+            const evenements = [...new Set(operations.map(op => 
+                op.status || op.Ident
+            ).filter(Boolean))];
+            
+            document.getElementById('totalOperations').textContent = operations.length;
+            document.getElementById('totalOperateurs').textContent = operateurs.length;
+            document.getElementById('totalLancements').textContent = lancements.length;
+            document.getElementById('totalEvenements').textContent = evenements.length;
+        }
+        
+        function formatTime(time) {
+            if (!time) return '-';
+            if (time.includes('1970')) {
+                // Extraire seulement l'heure si c'est une date 1970
+                const date = new Date(time);
+                return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+            }
+            return time;
+        }
+        
+        function formatDate(date) {
+            if (!date) return '-';
+            return new Date(date).toLocaleDateString('fr-FR');
+        }
+        
+        async function testerConnexion() {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = 'status info';
+            statusDiv.innerHTML = '🔗 Test de connexion aux serveurs...';
+            
+            const serveurs = [
+                { nom: 'Frontend (8080)', url: 'http://localhost:8080' },
+                { nom: 'Backend (3000)', url: 'http://localhost:3000' }
+            ];
+            
+            let resultats = [];
+            
+            for (const serveur of serveurs) {
+                try {
+                    const response = await fetch(serveur.url);
+                    resultats.push(`✅ ${serveur.nom}: OK`);
+                } catch (error) {
+                    resultats.push(`❌ ${serveur.nom}: ${error.message}`);
+                }
+            }
+            
+            statusDiv.className = 'status info';
+            statusDiv.innerHTML = `🔗 <strong>Test de connexion:</strong><br>${resultats.join('<br>')}`;
+        }
+        
+        function afficherTout() {
+            if (donneesCompletes.length > 0) {
+                afficherDonnees(donneesCompletes);
+                document.getElementById('tableContainer').style.display = 'block';
+            } else {
+                chargerDonnees();
+            }
+        }
+        
+        // Chargement automatique au démarrage
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(chargerDonnees, 1000);
+        });
+    </script>
+</body>
+</html>
+
+

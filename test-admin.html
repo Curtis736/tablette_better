@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Admin API</title>
+</head>
+<body>
+    <h1>Test Admin API</h1>
+    <button onclick="testAPI()">Tester API Admin</button>
+    <pre id="result"></pre>
+
+    <script>
+        async function testAPI() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = 'Chargement...';
+            
+            try {
+                console.log('🔄 Test de l\'API admin...');
+                
+                // Test direct de l'API
+                const response = await fetch('http://localhost:3000/api/admin');
+                const data = await response.json();
+                
+                console.log('📊 Données reçues:', data);
+                console.log('📋 Nombre d\'opérations:', data.operations ? data.operations.length : 'undefined');
+                console.log('📈 Stats:', data.stats);
+                
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+                
+                // Test de l'affichage
+                if (data.operations && data.operations.length > 0) {
+                    console.log('✅ Données OK - ' + data.operations.length + ' opérations trouvées');
+                } else {
+                    console.log('❌ Pas d\'opérations dans les données');
+                }
+                
+            } catch (error) {
+                console.error('❌ Erreur:', error);
+                resultDiv.textContent = 'Erreur: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+

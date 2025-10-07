@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SEDI - Interface Tablette</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📱</text></svg>">
+    <link rel="stylesheet" href="assets/styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- Écran de connexion -->
+        <div id="loginScreen" class="screen active">
+            <div class="login-container">
+                <div class="logo">
+                    <i class="fas fa-industry"></i>
+                    <h1>SEDI ERP</h1>
+                </div>
+                <form id="loginForm">
+                    <div class="input-group">
+                        <i class="fas fa-user"></i>
+                        <input type="text" id="operatorCode" placeholder="Code Opérateur" required>
+                    </div>
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Se connecter
+                    </button>
+                </form>
+                <div class="admin-access">
+                    <button id="adminModeBtn" class="btn-secondary">
+                        <i class="fas fa-cog"></i>
+                        Mode Administrateur
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Écran de connexion admin -->
+        <div id="adminLoginScreen" class="screen">
+            <div class="login-container">
+                <div class="logo">
+                    <i class="fas fa-shield-alt"></i>
+                    <h1>Administration</h1>
+                </div>
+                <form id="adminLoginForm">
+                    <div class="input-group">
+                        <i class="fas fa-user-shield"></i>
+                        <input type="text" id="adminUsername" placeholder="Nom d'utilisateur" required>
+                    </div>
+                    <div class="input-group">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" id="adminPassword" placeholder="Mot de passe" required>
+                    </div>
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Se connecter
+                    </button>
+                </form>
+                <div class="back-to-login">
+                    <button id="backToLoginBtn" class="btn-secondary">
+                        <i class="fas fa-arrow-left"></i>
+                        Retour
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Interface Opérateur -->
+        <div id="operatorScreen" class="screen">
+            <header class="header">
+                <div class="user-info">
+                    <i class="fas fa-user-circle"></i>
+                    <span id="currentOperator"></span>
+                </div>
+                <button id="logoutBtn" class="btn-secondary">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Déconnexion
+                </button>
+            </header>
+
+            <main class="main-content">
+                <!-- Saisie du lancement -->
+                <div class="section">
+                    <h2><i class="fas fa-keyboard"></i> Code de Lancement</h2>
+                    <div class="input-group">
+                        <i class="fas fa-barcode"></i>
+                        <input type="text" id="lancementSearch" placeholder="Saisir le code de lancement..." autocomplete="off" value="LT">
+                    </div>
+                    <div id="lancementList" class="lancement-list" style="display: none;"></div>
+                    <div class="help-text">
+                        <small><i class="fas fa-info-circle"></i> "LT" est pré-rempli, saisissez seulement les chiffres (ex: LT2501145)</small>
+                    </div>
+                </div>
+
+                <!-- Contrôles de lancement -->
+                <div class="section" id="controlsSection" style="display: none;">
+                    <h2><i class="fas fa-cogs"></i> Contrôles</h2>
+                    <div class="lancement-info">
+                        <h3 id="selectedLancement"></h3>
+                        <p id="lancementDetails"></p>
+                    </div>
+                    <div class="controls">
+                        <button id="startBtn" class="btn-success">
+                            <i class="fas fa-play"></i>
+                            Démarrer
+                        </button>
+                        <button id="pauseBtn" class="btn-warning" disabled>
+                            <i class="fas fa-pause"></i>
+                            Pause
+                        </button>
+                        <button id="stopBtn" class="btn-danger" disabled>
+                            <i class="fas fa-stop"></i>
+                            Terminer
+                        </button>
+                    </div>
+                    <div class="timer">
+                        <div class="timer-display" id="timerDisplay">00:00:00</div>
+                        <div class="status" id="statusDisplay">En attente</div>
+                    </div>
+                </div>
+
+                <!-- Historique des lancements -->
+                <div class="section">
+                    <h2><i class="fas fa-history"></i> Mon Historique</h2>
+                    <div class="history-controls">
+                        <button id="refreshHistoryBtn" class="btn-primary">
+                            <i class="fas fa-sync"></i>
+                            Actualiser
+                        </button>
+                    </div>
+                    <div class="data-table">
+                        <div class="table-container">
+                            <table id="operatorHistoryTable">
+                                <thead>
+                                    <tr>
+                                        <th>Code Lancement</th>
+                                        <th>Designation</th>
+                                        <th>Phase</th>
+                                        <th>Heure Début</th>
+                                        <th>Heure Fin</th>
+                                        <th>Statut</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="operatorHistoryTableBody">
+                                    <tr><td colspan="6" class="no-data">Chargement de l'historique...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Interface Admin -->
+        <div id="adminScreen" class="screen">
+            <header class="header">
+                <h1><i class="fas fa-chart-line"></i> Tableau de Bord Admin</h1>
+                <div>
+                    <button id="backToOperatorBtn" class="btn-secondary">
+                        <i class="fas fa-arrow-left"></i>
+                        Retour Opérateur
+                    </button>
+                </div>
+            </header>
+
+            <main class="main-content">
+                <div class="admin-controls">
+                    <!-- Ligne 1: Filtres -->
+                    <div class="filters-row">
+                        <div class="filter-group">
+                            <label for="operatorFilter">
+                                <i class="fas fa-user"></i>
+                                Opérateur :
+                            </label>
+                            <select id="operatorFilter" class="filter-select">
+                                <option value="">Tous les opérateurs</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label for="statusFilter">
+                                <i class="fas fa-tasks"></i>
+                                Statut :
+                            </label>
+                            <select id="statusFilter" class="filter-select">
+                                <option value="">Tous les statuts</option>
+                                <option value="DEBUT">En cours</option>
+                                <option value="PAUSE">En pause</option>
+                                <option value="FIN">Terminé</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label for="periodFilter">
+                                <i class="fas fa-calendar"></i>
+                                Période :
+                            </label>
+                            <select id="periodFilter" class="filter-select">
+                                <option value="today">Aujourd'hui</option>
+                                <option value="week">Cette semaine</option>
+                                <option value="month">Ce mois</option>
+                                <option value="custom">Personnalisé</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label for="searchFilter">
+                                <i class="fas fa-search"></i>
+                                Recherche :
+                            </label>
+                            <input type="text" id="searchFilter" class="filter-input" placeholder="Code lancement...">
+                        </div>
+                    </div>
+                    
+                    <!-- Ligne 2: Actions -->
+                    <div class="actions-row">
+                        <button id="addOperationBtn" class="btn-success">
+                            <i class="fas fa-plus"></i>
+                            Ajouter une ligne
+                        </button>
+                        <button id="refreshDataBtn" class="btn-primary">
+                            <i class="fas fa-sync"></i>
+                            Actualiser
+                        </button>
+                        <button id="transferBtn" class="btn-warning">
+                            <i class="fas fa-exchange-alt"></i>
+                            Transfert
+                        </button>
+                        <button id="clearFiltersBtn" class="btn-secondary">
+                            <i class="fas fa-times"></i>
+                            Effacer filtres
+                        </button>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <i class="fas fa-users"></i>
+                        <h3 id="totalOperators">0</h3>
+                        <p>Opérateurs actifs</p>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-play-circle"></i>
+                        <h3 id="activeLancements">0</h3>
+                        <p>Lancements en cours</p>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-pause-circle"></i>
+                        <h3 id="pausedLancements">0</h3>
+                        <p>Lancements en pause</p>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-check-circle"></i>
+                        <h3 id="completedLancements">0</h3>
+                        <p>Lancements terminés</p>
+                    </div>
+                </div>
+
+                <div class="data-table">
+                    <h3>Détails des Opérations</h3>
+                    <div class="table-container">
+                        <table id="operationsTable">
+                        <thead>
+                            <tr>
+                                <th>Opérateur</th>
+                                <th>Code Lancement</th>
+                                <th>Designation</th>
+                                <th>Heure Début</th>
+                                <th>Heure Fin</th>
+                                <th>Statut</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                            <tbody id="operationsTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+    </div>
+
+    <script type="module" src="index.js?v=20251007-final"></script>
+</body>
+</html>
