@@ -8,13 +8,15 @@ class TimeUtils {
      */
     static getCurrentTime() {
         const now = new Date();
-        // Convertir en heure française (UTC+1 ou UTC+2 selon la saison)
-        const frenchTime = new Date(now.toLocaleString("en-US", {timeZone: "Europe/Paris"}));
+        // Utiliser toLocaleTimeString directement avec le fuseau horaire français
+        const timeString = now.toLocaleTimeString("fr-FR", {
+            timeZone: "Europe/Paris",
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
         
-        const hours = frenchTime.getHours().toString().padStart(2, '0');
-        const minutes = frenchTime.getMinutes().toString().padStart(2, '0');
-        
-        return `${hours}:${minutes}`;
+        return timeString;
     }
 
     /**
@@ -23,13 +25,12 @@ class TimeUtils {
      */
     static getCurrentDate() {
         const now = new Date();
-        const frenchDate = new Date(now.toLocaleString("en-US", {timeZone: "Europe/Paris"}));
+        // Utiliser toLocaleDateString directement avec le fuseau horaire français
+        const dateString = now.toLocaleDateString("fr-CA", {
+            timeZone: "Europe/Paris"
+        });
         
-        const year = frenchDate.getFullYear();
-        const month = (frenchDate.getMonth() + 1).toString().padStart(2, '0');
-        const day = frenchDate.getDate().toString().padStart(2, '0');
-        
-        return `${year}-${month}-${day}`;
+        return dateString; // Format YYYY-MM-DD
     }
 
     /**
