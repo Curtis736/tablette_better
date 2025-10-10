@@ -100,19 +100,25 @@
                         <h3 id="selectedLancement"></h3>
                         <p id="lancementDetails"></p>
                     </div>
-                    <div class="controls">
-                        <button id="startBtn" class="btn-success">
-                            <i class="fas fa-play"></i>
-                            Démarrer
-                        </button>
-                        <button id="pauseBtn" class="btn-warning" disabled>
-                            <i class="fas fa-pause"></i>
-                            Pause
-                        </button>
-                        <button id="stopBtn" class="btn-danger" disabled>
-                            <i class="fas fa-stop"></i>
-                            Terminer
-                        </button>
+                    <div class="controls-row">
+                        <div class="controls">
+                            <button id="startBtn" class="btn-success">
+                                <i class="fas fa-play"></i>
+                                Démarrer
+                            </button>
+                            <button id="pauseBtn" class="btn-warning" disabled>
+                                <i class="fas fa-pause"></i>
+                                Pause
+                            </button>
+                            <button id="stopBtn" class="btn-danger" disabled>
+                                <i class="fas fa-stop"></i>
+                                Terminer
+                            </button>
+                        </div>
+                        <div class="end-time-display">
+                            <div class="end-time-label">Heure de fin prévue :</div>
+                            <div class="end-time-value" id="endTimeDisplay">--:--</div>
+                        </div>
                     </div>
                     <div class="timer">
                         <div class="timer-display" id="timerDisplay">00:00:00</div>
@@ -185,9 +191,10 @@
                             </label>
                             <select id="statusFilter" class="filter-select">
                                 <option value="">Tous les statuts</option>
-                                <option value="DEBUT">En cours</option>
+                                <option value="EN_COURS">En cours</option>
                                 <option value="PAUSE">En pause</option>
-                                <option value="FIN">Terminé</option>
+                                <option value="TERMINE">Terminé</option>
+                                <option value="PAUSE_TERMINEE">Pause terminée</option>
                             </select>
                         </div>
                         
@@ -276,12 +283,15 @@
                             </tbody>
                         </table>
                     </div>
+                    <div id="paginationInfo" class="pagination-container">
+                        <!-- Les informations de pagination seront ajoutées ici par JavaScript -->
+                    </div>
                 </div>
 
             </main>
         </div>
     </div>
 
-    <script type="module" src="index.js?v=20251007-final"></script>
+    <script type="module" src="index.js?v=20251010-fixed"></script>
 </body>
 </html>

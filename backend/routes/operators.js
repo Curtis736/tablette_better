@@ -4,15 +4,33 @@ const router = express.Router();
 const { executeQuery } = require('../config/database');
 const TimeUtils = require('../utils/timeUtils');
 
-// Fonction utilitaire pour formater les dates/heures (format HH:mm seulement)
+// Fonction utilitaire pour formater les dates/heures (format HH:mm seulement, fuseau horaire Paris)
 function formatDateTime(dateTime) {
     if (!dateTime) return null;
     
     try {
+        // Si c'est déjà au format HH:mm ou HH:mm:ss, le retourner directement
+        if (typeof dateTime === 'string' && /^\d{2}:\d{2}(:\d{2})?$/.test(dateTime)) {
+            const parts = dateTime.split(':');
+            return `${parts[0]}:${parts[1]}`; // Retourner juste HH:mm
+        }
+        
+        // Si c'est un objet Date, extraire l'heure avec fuseau horaire français
+        if (dateTime instanceof Date) {
+            return dateTime.toLocaleTimeString('fr-FR', {
+                timeZone: 'Europe/Paris',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+        }
+        
+        // Sinon, traiter comme une date complète
         const date = new Date(dateTime);
         if (isNaN(date.getTime())) return null;
         
         return date.toLocaleTimeString('fr-FR', {
+            timeZone: 'Europe/Paris',
             hour: '2-digit',
             minute: '2-digit',
             hour12: false
@@ -50,11 +68,15 @@ function processLancementEvents(events) {
         // Trouver les événements DEBUT et FIN
         const debutEvent = events.find(e => e.Ident === 'DEBUT');
         const finEvent = events.find(e => e.Ident === 'FIN');
+        const pauseEvents = events.filter(e => e.Ident === 'PAUSE');
+        const repriseEvents = events.filter(e => e.Ident === 'REPRISE');
         
+        // Déterminer le statut actuel
         let status = 'En cours';
         if (finEvent) {
             status = 'Terminé';
-        } else if (events.some(e => e.Ident === 'PAUSE')) {
+        } else if (pauseEvents.length > repriseEvents.length) {
+            // Il y a plus de pauses que de reprises, donc en pause
             status = 'En pause';
         }
         
@@ -66,13 +88,15 @@ function processLancementEvents(events) {
             startTime: debutEvent && debutEvent.HeureDebut ? formatDateTime(debutEvent.HeureDebut) : null,
             endTime: finEvent && finEvent.HeureFin ? formatDateTime(finEvent.HeureFin) : null,
             status: status,
-            phase: firstEvent.Phase || 'PRODUCTION'
+            phase: firstEvent.Phase || 'PRODUCTION',
+            lastUpdate: lastEvent.DateCreation
         };
         
         processedOperations.push(operation);
     });
     
-    return processedOperations;
+    // Trier par date du dernier événement (plus récent en premier)
+    return processedOperations.sort((a, b) => new Date(b.lastUpdate) - new Date(a.lastUpdate));
 }
 
 // Fonction pour valider et récupérer les informations d'un lancement depuis LCTE
@@ -672,49 +696,21 @@ router.get('/:operatorCode/operations', async (req, res) => {
         const events = await executeQuery(eventsQuery);
         console.log(`📊 ${events.length} événements trouvés pour l'opérateur ${operatorCode}`);
         
-        // Afficher chaque événement comme une ligne séparée (pas de regroupement)
-        const formattedOperations = events.map(event => {
-            // Déterminer le statut et les heures selon l'événement
-            let status = 'En cours';
-            let statusCode = 'EN_COURS';
-            let startTime = null;
-            let endTime = null;
-            
-            switch(event.Ident) {
-                case 'DEBUT':
-                    status = 'Démarré';
-                    statusCode = 'DEBUT';
-                    startTime = event.HeureDebut ? formatDateTime(event.HeureDebut) : null;
-                    break;
-                case 'PAUSE':
-                    status = 'En pause';
-                    statusCode = 'PAUSE';
-                    startTime = event.HeureDebut ? formatDateTime(event.HeureDebut) : null;
-                    break;
-                case 'REPRISE':
-                    status = 'Repris';
-                    statusCode = 'REPRISE';
-                    startTime = event.HeureDebut ? formatDateTime(event.HeureDebut) : null;
-                    break;
-                case 'FIN':
-                    status = 'Terminé';
-                    statusCode = 'TERMINE';
-                    endTime = event.HeureFin ? formatDateTime(event.HeureFin) : null;
-                    break;
-            }
-            
-            return {
-                id: event.NoEnreg,
-                operatorCode: event.CodeRubrique,
-                lancementCode: event.CodeLanctImprod,
-                article: event.Article || 'N/A',
-                startTime: startTime,
-                endTime: endTime,
-                status: status,
-                statusCode: statusCode,
-                phase: event.Phase || 'PRODUCTION'
-            };
-        });
+        // Utiliser la fonction qui garde les pauses séparées
+        const { processLancementEventsWithPauses } = require('./admin');
+        const formattedOperations = processLancementEventsWithPauses(events).map(operation => ({
+            id: operation.id,
+            operatorCode: operation.operatorCode,
+            lancementCode: operation.lancementCode,
+            article: operation.article,
+            startTime: operation.startTime,
+            endTime: operation.endTime,
+            status: operation.status,
+            statusCode: operation.statusCode || (operation.status === 'Terminé' ? 'TERMINE' : 
+                       operation.status === 'En pause' ? 'PAUSE' : 'EN_COURS'),
+            phase: operation.phase,
+            type: operation.type // Ajouter le type pour distinguer les pauses
+        }));
         
         res.json({
             success: true,

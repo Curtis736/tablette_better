@@ -49,31 +49,138 @@ async function validateLancement(codeLancement) {
     }
 }
 
-// Fonction pour formater une date en HH:mm
-function formatDateTime(dateTime) {
-    if (!dateTime) return null;
+// Fonction pour valider et formater une heure au format TIME SQL
+function formatTimeForSQL(timeInput) {
+    if (!timeInput) return null;
     
     try {
-        let date;
+        // Si c'est déjà une chaîne au format HH:mm ou HH:mm:ss
+        if (typeof timeInput === 'string') {
+            const timeMatch = timeInput.match(/^(\d{1,2}):(\d{2})(:(\d{2}))?$/);
+            if (timeMatch) {
+                const hours = timeMatch[1].padStart(2, '0');
+                const minutes = timeMatch[2];
+                const seconds = timeMatch[4] || '00';
+                const result = `${hours}:${minutes}:${seconds}`;
+                console.log(`🔧 formatTimeForSQL: ${timeInput} → ${result}`);
+                return result;
+            }
+        }
         
+        // Si c'est un objet Date, extraire seulement l'heure avec fuseau horaire français
+        if (timeInput instanceof Date) {
+            const timeString = timeInput.toLocaleTimeString('fr-FR', {
+                timeZone: 'Europe/Paris',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+            console.log(`🔧 formatTimeForSQL: Date → ${timeString}`);
+            return timeString;
+        }
+        
+        console.warn(`⚠️ Format d'heure non reconnu: ${timeInput}`);
+        return null;
+    } catch (error) {
+        console.error('Erreur formatage heure SQL:', error);
+        return null;
+    }
+}
+
+// Fonction pour valider les heures suspectes (comme 02:00 qui pourrait indiquer un problème)
+function validateSuspiciousTime(timeString, context = '') {
+    if (!timeString) return { isValid: true, warning: null };
+    
+    const time = timeString.split(':');
+    const hour = parseInt(time[0]);
+    const minute = parseInt(time[1]);
+    
+    // Détecter les heures suspectes
+    if (hour === 2 && minute === 0) {
+        return {
+            isValid: true,
+            warning: `⚠️ Heure suspecte détectée: ${timeString} ${context}. Cela pourrait indiquer une opération terminée à 2h du matin ou un problème de calcul de durée.`
+        };
+    }
+    
+    // Détecter les heures très tardives ou très matinales
+    if (hour >= 22 || hour <= 4) {
+        return {
+            isValid: true,
+            warning: `ℹ Heure inhabituelle: ${timeString} ${context}. Vérifiez si cette opération traverse minuit.`
+        };
+    }
+    
+    return { isValid: true, warning: null };
+}
+
+// Fonction pour formater une date en HH:mm (fuseau horaire Paris)
+function formatDateTime(dateTime) {
+    if (!dateTime) {
+        console.log('🔍 formatDateTime: dateTime est null/undefined');
+        return null;
+    }
+    
+    try {
         // Si c'est déjà une chaîne au format HH:mm ou HH:mm:ss, la retourner directement
         if (typeof dateTime === 'string' && /^\d{2}:\d{2}(:\d{2})?$/.test(dateTime)) {
             const parts = dateTime.split(':');
-            return `${parts[0]}:${parts[1]}`;
+            const formattedTime = `${parts[0]}:${parts[1]}`;
+            
+            // Valider les heures suspectes
+            const validation = validateSuspiciousTime(formattedTime, '(format direct)');
+            if (validation.warning) {
+                console.warn(validation.warning);
+            }
+            
+            return formattedTime;
+        }
+        
+        // Si c'est un objet Date, extraire l'heure avec fuseau horaire français
+        if (dateTime instanceof Date) {
+            const timeString = dateTime.toLocaleTimeString('fr-FR', {
+                timeZone: 'Europe/Paris',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            
+            // Valider les heures suspectes
+            const validation = validateSuspiciousTime(timeString, '(formatage Date object)');
+            if (validation.warning) {
+                console.warn(validation.warning);
+            }
+            
+            console.log(`🔍 formatDateTime: Date object -> ${timeString}`);
+            return timeString;
         }
         
         // Sinon, essayer de créer un objet Date
-        date = new Date(dateTime);
+        const date = new Date(dateTime);
         if (isNaN(date.getTime())) {
-            console.warn('Date invalide:', dateTime);
+            console.warn('🔍 formatDateTime: Date invalide:', dateTime);
             return null;
         }
         
-        const hours = date.getHours().toString().padStart(2, '0');
-        const minutes = date.getMinutes().toString().padStart(2, '0');
-        return `${hours}:${minutes}`;
+        // Utiliser fuseau horaire français (Europe/Paris)
+        const timeString = date.toLocaleTimeString('fr-FR', {
+            timeZone: 'Europe/Paris',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+        
+        // Valider les heures suspectes
+        const validation = validateSuspiciousTime(timeString, '(formatage date)');
+        if (validation.warning) {
+            console.warn(validation.warning);
+        }
+        
+        console.log(`🔍 formatDateTime: ${dateTime} -> ${timeString}`);
+        return timeString;
     } catch (error) {
-        console.error('Erreur formatage date:', dateTime, error);
+        console.error('🔍 formatDateTime: Erreur formatage date:', dateTime, error);
         return null;
     }
 }
@@ -91,12 +198,27 @@ function calculateDuration(startDate, endDate) {
         const diffMs = end.getTime() - start.getTime();
         const diffMinutes = Math.floor(diffMs / (1000 * 60));
         
-        if (diffMinutes < 0) return null;
+        // Gérer les durées négatives (traversée de minuit)
+        if (diffMinutes < 0) {
+            console.log(`⚠️ Durée négative détectée: ${startDate} -> ${endDate} (${diffMinutes}min)`);
+            // Si la durée est négative, cela peut indiquer une traversée de minuit
+            // Dans ce cas, on peut soit retourner null soit ajuster
+            return null;
+        }
         
         const hours = Math.floor(diffMinutes / 60);
         const minutes = diffMinutes % 60;
         
-        if (hours > 0) {
+        // Format amélioré pour les durées longues
+        if (hours >= 24) {
+            const days = Math.floor(hours / 24);
+            const remainingHours = hours % 24;
+            if (remainingHours > 0) {
+                return `${days}j${remainingHours}h${minutes.toString().padStart(2, '0')}`;
+            } else {
+                return `${days}j${minutes.toString().padStart(2, '0')}min`;
+            }
+        } else if (hours > 0) {
             return `${hours}h${minutes.toString().padStart(2, '0')}`;
         } else {
             return `${minutes}min`;
@@ -129,14 +251,36 @@ async function consolidateLancementTimes(operatorCode, lancementCode) {
 
         if (!debutEvent || !finEvent) return; // Lancement pas encore terminé
 
-        // Calculer les durées en utilisant HeureDebut et HeureFin
-        if (!debutEvent.HeureDebut || !finEvent.HeureFin) return; // Heures manquantes
+        // Calculer les durées en utilisant DateCreation pour éviter les problèmes de minuit
+        const startDateTime = new Date(debutEvent.DateCreation);
+        const endDateTime = new Date(finEvent.DateCreation);
         
-        // Créer des objets Date pour aujourd'hui avec les heures
-        const today = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
-        const startTime = new Date(`${today}T${debutEvent.HeureDebut}`);
-        const endTime = new Date(`${today}T${finEvent.HeureFin}`);
-        const totalDuration = Math.floor((endTime - startTime) / (1000 * 60)); // en minutes
+        // Si les heures sont disponibles, les utiliser pour un calcul plus précis
+        let totalDuration;
+        if (debutEvent.HeureDebut && finEvent.HeureFin) {
+            // Créer des objets Date avec les vraies dates et heures
+            const startDate = new Date(debutEvent.DateCreation);
+            const endDate = new Date(finEvent.DateCreation);
+            
+            // Extraire les heures et minutes
+            const [startHour, startMin] = debutEvent.HeureDebut.split(':').map(Number);
+            const [endHour, endMin] = finEvent.HeureFin.split(':').map(Number);
+            
+            // Créer des dates complètes
+            startDate.setHours(startHour, startMin, 0, 0);
+            endDate.setHours(endHour, endMin, 0, 0);
+            
+            // Si l'heure de fin est antérieure à l'heure de début, ajouter un jour
+            if (endDate < startDate) {
+                endDate.setDate(endDate.getDate() + 1);
+                console.log(`⚠️ Opération traversant minuit détectée: ${debutEvent.HeureDebut} -> ${finEvent.HeureFin} (+1 jour)`);
+            }
+            
+            totalDuration = Math.floor((endDate - startDate) / (1000 * 60)); // en minutes
+        } else {
+            // Fallback sur DateCreation si les heures ne sont pas disponibles
+            totalDuration = Math.floor((endDateTime - startDateTime) / (1000 * 60));
+        }
 
         // Calculer le temps de pause
         const pauseEvents = events.filter(e => e.Ident === 'PAUSE');
@@ -189,7 +333,336 @@ async function consolidateLancementTimes(operatorCode, lancementCode) {
     }
 }
 
-// Fonction pour regrouper les événements par lancement et calculer les temps
+// Fonction pour regrouper les événements par lancement sur une seule ligne (sans pauses séparées)
+function processLancementEventsSingleLine(events) {
+    const lancementGroups = {};
+    
+    // Regrouper par CodeLanctImprod et CodeRubrique
+    events.forEach(event => {
+        const key = `${event.CodeLanctImprod}_${event.CodeRubrique}`;
+        if (!lancementGroups[key]) {
+            lancementGroups[key] = [];
+        }
+        lancementGroups[key].push(event);
+    });
+    
+    const processedItems = [];
+    
+    Object.keys(lancementGroups).forEach(key => {
+        const groupEvents = lancementGroups[key].sort((a, b) => 
+            new Date(a.DateCreation) - new Date(b.DateCreation)
+        );
+        
+        console.log(`🔍 Traitement du groupe ${key}:`, groupEvents.map(e => ({
+            ident: e.Ident,
+            dateCreation: e.DateCreation,
+            heureDebut: e.HeureDebut,
+            heureFin: e.HeureFin
+        })));
+        
+        // Trouver les événements clés
+        const debutEvent = groupEvents.find(e => e.Ident === 'DEBUT');
+        const finEvent = groupEvents.find(e => e.Ident === 'FIN');
+        const pauseEvents = groupEvents.filter(e => e.Ident === 'PAUSE');
+        const repriseEvents = groupEvents.filter(e => e.Ident === 'REPRISE');
+        
+        if (debutEvent) {
+            let status, statusLabel;
+            let endTime = null;
+            
+            if (finEvent) {
+                // DÉMARRÉ → FIN = TERMINÉ
+                status = 'TERMINE';
+                statusLabel = 'Terminé';
+                endTime = finEvent.HeureFin ? formatDateTime(finEvent.HeureFin) : formatDateTime(finEvent.DateCreation);
+            } else if (pauseEvents.length > 0 && pauseEvents.length > repriseEvents.length) {
+                // DÉMARRÉ → PAUSE = EN PAUSE
+                status = 'PAUSE';
+                statusLabel = 'En pause';
+                // Pas d'heure de fin pour une pause en cours
+                endTime = null;
+            } else {
+                // DÉMARRÉ seul = EN COURS
+                status = 'EN_COURS';
+                statusLabel = 'En cours';
+                endTime = null;
+            }
+            
+            console.log(`🔍 Ligne unique pour ${key}:`, status);
+            processedItems.push(createLancementItem(debutEvent, groupEvents, status, statusLabel, endTime));
+        }
+        
+        console.log(`🔍 Créé 1 item pour ${key}`);
+    });
+    
+    console.log(`🔍 Total d'items créés: ${processedItems.length}`);
+    return processedItems.sort((a, b) => 
+        new Date(b.lastUpdate) - new Date(a.lastUpdate)
+    );
+}
+
+// Fonction pour regrouper les événements par lancement et calculer les temps (garde les pauses séparées)
+function processLancementEventsWithPauses(events) {
+    const lancementGroups = {};
+    
+    // Regrouper par CodeLanctImprod et CodeRubrique
+    events.forEach(event => {
+        const key = `${event.CodeLanctImprod}_${event.CodeRubrique}`;
+        if (!lancementGroups[key]) {
+            lancementGroups[key] = [];
+        }
+        lancementGroups[key].push(event);
+    });
+    
+    const processedItems = [];
+    
+    Object.keys(lancementGroups).forEach(key => {
+        const groupEvents = lancementGroups[key].sort((a, b) => 
+            new Date(a.DateCreation) - new Date(b.DateCreation)
+        );
+        
+        console.log(`🔍 Traitement du groupe ${key}:`, groupEvents.map(e => ({
+            ident: e.Ident,
+            dateCreation: e.DateCreation,
+            heureDebut: e.HeureDebut,
+            heureFin: e.HeureFin
+        })));
+        
+        // Logique : DÉMARRÉ+FIN sur une ligne, PAUSE séparées
+        console.log(`🔍 Traitement de ${groupEvents.length} événements pour ${key}`);
+        
+        const debutEvent = groupEvents.find(e => e.Ident === 'DEBUT');
+        const finEvent = groupEvents.find(e => e.Ident === 'FIN');
+        const pauseEvents = groupEvents.filter(e => e.Ident === 'PAUSE');
+        const repriseEvents = groupEvents.filter(e => e.Ident === 'REPRISE');
+        
+        // Déterminer le statut de la ligne principale (jamais "EN PAUSE")
+        let currentStatus = 'EN_COURS';
+        let statusLabel = 'En cours';
+        
+        if (finEvent) {
+            currentStatus = 'TERMINE';
+            statusLabel = 'Terminé';
+        } else {
+            // La ligne principale ne doit jamais être "EN PAUSE"
+            // Elle reste "EN COURS" même si il y a des pauses
+            currentStatus = 'EN_COURS';
+            statusLabel = 'En cours';
+        }
+        
+        // Créer la ligne principale avec le statut correct
+        if (debutEvent) {
+            let endTime = null;
+            
+            if (finEvent) {
+                endTime = finEvent.HeureFin ? formatDateTime(finEvent.HeureFin) : formatDateTime(finEvent.DateCreation);
+            }
+            
+            console.log(`🔍 Ligne principale pour ${key}:`, currentStatus);
+            processedItems.push(createLancementItem(debutEvent, groupEvents, currentStatus, statusLabel, endTime));
+        }
+        
+        // Créer les lignes de pause séparées
+        console.log(`🔍 Pauses trouvées: ${pauseEvents.length}, Reprises trouvées: ${repriseEvents.length}`);
+        console.log(`🔍 Pauses:`, pauseEvents.map(p => ({ id: p.NoEnreg, date: p.DateCreation, heure: p.HeureDebut })));
+        console.log(`🔍 Reprises:`, repriseEvents.map(r => ({ id: r.NoEnreg, date: r.DateCreation, heure: r.HeureDebut })));
+        
+        const lastEvent = groupEvents[groupEvents.length - 1];
+        console.log(`🔍 Dernier événement pour ${key}:`, lastEvent ? `${lastEvent.Ident} à ${lastEvent.DateCreation}` : 'AUCUN');
+        
+        // Créer une copie des reprises pour éviter les doublons
+        const availableReprises = [...repriseEvents];
+        
+        pauseEvents.forEach((pauseEvent, index) => {
+            // Trouver la reprise correspondante (la plus proche dans le temps après la pause)
+            // et qui correspond au même lancement et opérateur
+            const repriseIndex = availableReprises.findIndex(reprise => 
+                (new Date(reprise.DateCreation) > new Date(pauseEvent.DateCreation) ||
+                 (new Date(reprise.DateCreation).getTime() === new Date(pauseEvent.DateCreation).getTime() && reprise.NoEnreg > pauseEvent.NoEnreg)) &&
+                reprise.CodeLanctImprod === pauseEvent.CodeLanctImprod &&
+                reprise.CodeRubrique === pauseEvent.CodeRubrique
+            );
+            
+            const repriseEvent = repriseIndex >= 0 ? availableReprises[repriseIndex] : null;
+            
+            // Retirer la reprise utilisée pour éviter qu'elle soit réutilisée
+            if (repriseEvent) {
+                availableReprises.splice(repriseIndex, 1);
+                console.log(`🔍 Pause ${pauseEvent.NoEnreg} associée à la reprise ${repriseEvent.NoEnreg}`);
+            } else {
+                console.log(`⚠️ Aucune reprise trouvée pour la pause ${pauseEvent.NoEnreg}`);
+            }
+            
+            console.log(`🔍 Traitement pause ${index}:`, {
+                pauseId: pauseEvent.NoEnreg,
+                pauseDate: pauseEvent.DateCreation,
+                repriseId: repriseEvent ? repriseEvent.NoEnreg : 'AUCUNE',
+                repriseDate: repriseEvent ? repriseEvent.DateCreation : 'AUCUNE'
+            });
+            
+            let status, statusLabel;
+            let endTime = null;
+            
+            if (repriseEvent) {
+                status = 'PAUSE_TERMINEE';
+                statusLabel = 'Pause terminée';
+                // Pour une pause terminée, l'heure de fin = heure de la reprise
+                // Utiliser HeureDebut de la reprise (moment où l'opérateur reprend)
+                if (repriseEvent.HeureDebut) {
+                    endTime = formatDateTime(repriseEvent.HeureDebut);
+                } else {
+                    endTime = formatDateTime(repriseEvent.DateCreation);
+                }
+                console.log(`🔍 Pause terminée: début=${pauseEvent.DateCreation}, fin=${repriseEvent.DateCreation}`);
+            } else {
+                status = 'PAUSE';
+                statusLabel = 'En pause';
+                // Pour une pause en cours, pas d'heure de fin
+                endTime = null;
+            }
+            
+            console.log(`🔍 Ligne pause pour ${key}:`, status, 'endTime:', endTime);
+            processedItems.push(createLancementItem(pauseEvent, [pauseEvent], status, statusLabel, endTime));
+        });
+        
+        console.log(`🔍 Créé ${processedItems.length} items pour ${key}`);
+    });
+    
+    console.log(`🔍 Total d'items créés: ${processedItems.length}`);
+    return processedItems.sort((a, b) => 
+        new Date(b.lastUpdate) - new Date(a.lastUpdate)
+    );
+}
+
+// Fonction helper pour créer un item de lancement
+function createLancementItem(startEvent, sequence, status, statusLabel, endTime = null) {
+    const finEvent = sequence.find(e => e.Ident === 'FIN');
+    const pauseEvent = sequence.find(e => e.Ident === 'PAUSE');
+    
+    // Debug uniquement si problème détecté
+    if (startEvent.HeureDebut && typeof startEvent.HeureDebut !== 'string' && !(startEvent.HeureDebut instanceof Date)) {
+        console.log(`⚠️ createLancementItem - HeureDebut problématique:`, {
+            HeureDebut: startEvent.HeureDebut,
+            HeureDebutType: typeof startEvent.HeureDebut,
+            Ident: startEvent.Ident
+        });
+    }
+    
+    // Traitement sécurisé de l'heure de début
+    let startTime;
+    if (startEvent.HeureDebut) {
+        if (typeof startEvent.HeureDebut === 'string' && /^\d{2}:\d{2}(:\d{2})?$/.test(startEvent.HeureDebut)) {
+            // Format HH:mm ou HH:mm:ss - retourner directement
+            startTime = startEvent.HeureDebut.substring(0, 5);
+        } else if (startEvent.HeureDebut instanceof Date) {
+            // Objet Date - extraire l'heure avec fuseau horaire français
+            startTime = startEvent.HeureDebut.toLocaleTimeString('fr-FR', {
+                timeZone: 'Europe/Paris',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+        } else {
+            // Autre format - utiliser formatDateTime
+            startTime = formatDateTime(startEvent.HeureDebut);
+        }
+    } else {
+        // Pas d'heure de début - utiliser DateCreation
+        startTime = formatDateTime(startEvent.DateCreation);
+    }
+    
+    // Debug uniquement si problème détecté
+    if (startTime && startTime.includes(':')) {
+        const [hours, minutes] = startTime.split(':').map(Number);
+        if (hours > 23 || minutes > 59) {
+            console.log(`⚠️ startTime problématique:`, startTime);
+        }
+    }
+    
+    // Utiliser l'endTime fourni ou calculer selon le contexte
+    let finalEndTime;
+    if (endTime !== null) {
+        // Si endTime est fourni explicitement (cas des pauses terminées), l'utiliser
+        finalEndTime = endTime;
+    } else if (finEvent) {
+        // Pour les opérations terminées, utiliser HeureFin ou DateCreation
+        if (finEvent.HeureFin) {
+            if (typeof finEvent.HeureFin === 'string' && /^\d{2}:\d{2}(:\d{2})?$/.test(finEvent.HeureFin)) {
+                // Format HH:mm ou HH:mm:ss - retourner directement
+                finalEndTime = finEvent.HeureFin.substring(0, 5);
+            } else if (finEvent.HeureFin instanceof Date) {
+                // Objet Date - extraire l'heure avec fuseau horaire français
+                finalEndTime = finEvent.HeureFin.toLocaleTimeString('fr-FR', {
+                    timeZone: 'Europe/Paris',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+            } else {
+                // Autre format - utiliser formatDateTime
+                finalEndTime = formatDateTime(finEvent.HeureFin);
+            }
+        } else {
+            // Pas d'heure de fin - utiliser DateCreation
+            finalEndTime = formatDateTime(finEvent.DateCreation);
+        }
+    } else if (pauseEvent && status === 'PAUSE') {
+        // Pour les pauses en cours, pas d'heure de fin
+        finalEndTime = null;
+    } else {
+        // Fallback par défaut
+        finalEndTime = null;
+    }
+    
+    // Validation et correction des heures incohérentes
+    if (startTime && finalEndTime && startTime.includes(':') && finalEndTime.includes(':')) {
+        const [startHours, startMinutes] = startTime.split(':').map(Number);
+        const [endHours, endMinutes] = finalEndTime.split(':').map(Number);
+        
+        const startTotalMinutes = startHours * 60 + startMinutes;
+        const endTotalMinutes = endHours * 60 + endMinutes;
+        
+        // Si l'heure de fin est avant l'heure de début (et pas de traversée de minuit)
+        if (endTotalMinutes < startTotalMinutes && endTotalMinutes > 0) {
+            console.log(`⚠️ Heures incohérentes détectées: ${startTime} -> ${finalEndTime}`);
+            console.log(`🔧 Correction: heure de fin mise à null pour éviter l'incohérence`);
+            finalEndTime = null; // Mettre à null plutôt qu'une heure incorrecte
+        }
+    }
+    
+    // Debug uniquement si problème détecté
+    if (finalEndTime && finalEndTime.includes(':')) {
+        const [hours, minutes] = finalEndTime.split(':').map(Number);
+        if (hours > 23 || minutes > 59) {
+            console.log(`⚠️ finalEndTime problématique:`, finalEndTime);
+        }
+    }
+    
+    const duration = finalEndTime ? 
+        calculateDuration(startEvent.DateCreation, new Date(finalEndTime)) : null;
+    
+    return {
+        id: startEvent.NoEnreg,
+        operatorId: startEvent.CodeRubrique,
+        operatorName: startEvent.operatorName || 'Non assigné',
+        lancementCode: startEvent.CodeLanctImprod,
+        article: startEvent.Article || 'N/A',
+        phase: startEvent.Phase,
+        startTime: startTime,
+        endTime: finalEndTime,
+        pauseTime: pauseEvent ? formatDateTime(pauseEvent.DateCreation) : null,
+        duration: duration,
+        pauseDuration: null,
+        status: statusLabel,
+        statusCode: status,
+        generalStatus: status,
+        events: sequence.length,
+        lastUpdate: finEvent ? finEvent.DateCreation : (pauseEvent ? pauseEvent.DateCreation : startEvent.DateCreation),
+        type: (status === 'PAUSE' || status === 'PAUSE_TERMINEE') ? 'pause' : 'lancement'
+    };
+}
+
+// Fonction originale pour regrouper les événements par lancement et calculer les temps
 function processLancementEvents(events) {
     const lancementGroups = {};
     
@@ -215,16 +688,18 @@ function processLancementEvents(events) {
         const pauseEvents = groupEvents.filter(e => e.Ident === 'PAUSE');
         const repriseEvents = groupEvents.filter(e => e.Ident === 'REPRISE');
         
-        // Déterminer le statut actuel
+        // Déterminer le statut de la ligne principale (jamais "EN PAUSE")
         let currentStatus = 'EN_COURS';
         let statusLabel = 'En cours';
         
         if (finEvent) {
             currentStatus = 'TERMINE';
             statusLabel = 'Terminé';
-        } else if (pauseEvents.length > repriseEvents.length) {
-            currentStatus = 'PAUSE';
-            statusLabel = 'En pause';
+        } else {
+            // La ligne principale ne doit jamais être "EN PAUSE"
+            // Elle reste "EN COURS" même si il y a des pauses
+            currentStatus = 'EN_COURS';
+            statusLabel = 'En cours';
         }
         
         // Calculer les temps
@@ -263,7 +738,8 @@ function processLancementEvents(events) {
             statusCode: currentStatus,
             generalStatus: currentStatus,
             events: groupEvents.length,
-            lastUpdate: lastEvent.DateCreation
+            lastUpdate: lastEvent.DateCreation,
+            type: 'lancement' // Ligne principale toujours de type 'lancement'
         });
     });
     
@@ -275,18 +751,20 @@ function processLancementEvents(events) {
 // GET /api/admin - Route racine admin
 router.get('/', async (req, res) => {
     try {
+        console.log('🚀 DEBUT route /api/admin');
         const { date } = req.query;
         const targetDate = date || moment().format('YYYY-MM-DD');
         
         // Récupérer les statistiques
         const stats = await getAdminStats(targetDate);
         
-        // Récupérer les opérations
-        const operations = await getAdminOperations(targetDate);
+        // Récupérer les opérations (première page seulement pour la vue d'ensemble)
+        const operationsResult = await getAdminOperations(targetDate, 1, 25);
         
         res.json({
             stats,
-            operations,
+            operations: operationsResult.operations || [],
+            pagination: operationsResult.pagination || null,
             date: targetDate
         });
         
@@ -301,7 +779,7 @@ router.get('/', async (req, res) => {
 // GET /api/admin/operations - Récupérer les opérations pour l'interface admin
 router.get('/operations', async (req, res) => {
     try {
-        const { date } = req.query;
+        const { date, page = 1, limit = 25 } = req.query;
         const targetDate = date || moment().format('YYYY-MM-DD');
         
         // Éviter le cache
@@ -309,9 +787,9 @@ router.get('/operations', async (req, res) => {
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
         
-        const operations = await getAdminOperations(targetDate);
-        console.log('🎯 Envoi des opérations admin:', operations.length, 'éléments');
-        res.json(operations);
+        const result = await getAdminOperations(targetDate, parseInt(page), parseInt(limit));
+        console.log('🎯 Envoi des opérations admin:', result.operations?.length || 0, 'éléments');
+        res.json(result);
         
     } catch (error) {
         console.error('Erreur lors de la récupération des opérations:', error);
@@ -423,8 +901,9 @@ async function getAdminStats(date) {
 }
 
 // Fonction pour récupérer les opérations basées sur les événements ABHISTORIQUE_OPERATEURS
-async function getAdminOperations(date) {
+async function getAdminOperations(date, page = 1, limit = 25) {
     try {
+        console.log('🚀 DEBUT getAdminOperations - date:', date, 'page:', page, 'limit:', limit);
         console.log('🔍 Récupération des événements depuis ABHISTORIQUE_OPERATEURS...');
 
         // Récupérer tous les événements depuis ABHISTORIQUE_OPERATEURS
@@ -453,73 +932,78 @@ async function getAdminOperations(date) {
 
         console.log('Résultats:', allEvents.length, 'événements trouvés');
         
-        // Afficher chaque événement comme une ligne séparée (pas de regroupement)
-        const formattedOperations = allEvents.map(event => {
-            // Déterminer le statut et les heures selon l'événement
-            let status = 'En cours';
-            let statusCode = 'EN_COURS';
-            let startTime = null;
-            let endTime = null;
+        // Regrouper les événements par lancement mais garder les pauses séparées
+        console.log('🔍 Événements avant regroupement:', allEvents.length);
+        // Debug des types d'heures (uniquement si problème détecté)
+        const problematicEvents = allEvents.filter(e => 
+            e.HeureDebut && typeof e.HeureDebut !== 'string' && !(e.HeureDebut instanceof Date)
+        );
+        if (problematicEvents.length > 0) {
+            console.log('⚠️ Événements avec types d\'heures problématiques:', problematicEvents.map(e => ({
+                ident: e.Ident,
+                lancement: e.CodeLanctImprod,
+                heureDebut: e.HeureDebut,
+                heureDebutType: typeof e.HeureDebut
+            })));
+        }
+        
+        // Utiliser la fonction de regroupement avec pauses séparées
+        const processedLancements = processLancementEventsWithPauses(allEvents);
+        console.log('🔍 Événements après regroupement:', processedLancements.length);
+        console.log('🔍 Détail des événements regroupés:', processedLancements.map(p => ({
+            lancement: p.lancementCode,
+            type: p.type,
+            status: p.status,
+            startTime: p.startTime,
+            endTime: p.endTime
+        })));
+        
+        // Appliquer la pagination
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
+        const limitedLancements = processedLancements.slice(startIndex, endIndex);
+        
+        const formattedOperations = limitedLancements.map(lancement => {
+            // Trouver les informations détaillées depuis les événements
+            const relatedEvents = allEvents.filter(e => 
+                e.CodeLanctImprod === lancement.lancementCode && 
+                e.CodeRubrique === lancement.operatorId
+            );
             
-            // Debug pour voir les valeurs des heures
-            console.log(`Debug événement ${event.Ident}:`, {
-                HeureDebut: event.HeureDebut,
-                HeureFin: event.HeureFin,
-                DateCreation: event.DateCreation
-            });
-            
-            switch(event.Ident) {
-                case 'DEBUT':
-                    status = 'Démarré';
-                    statusCode = 'DEBUT';
-                    // Utiliser HeureDebut si disponible, sinon extraire l'heure de DateCreation
-                    startTime = event.HeureDebut ? formatDateTime(event.HeureDebut) : 
-                               (event.DateCreation ? formatDateTime(event.DateCreation) : null);
-                    break;
-                case 'PAUSE':
-                    status = 'En pause';
-                    statusCode = 'PAUSE';
-                    startTime = event.HeureDebut ? formatDateTime(event.HeureDebut) : 
-                               (event.DateCreation ? formatDateTime(event.DateCreation) : null);
-                    // Pour les pauses, on affiche l'heure de pause dans endTime aussi
-                    endTime = startTime;
-                    break;
-                case 'REPRISE':
-                    status = 'Repris';
-                    statusCode = 'REPRISE';
-                    startTime = event.HeureDebut ? formatDateTime(event.HeureDebut) : 
-                               (event.DateCreation ? formatDateTime(event.DateCreation) : null);
-                    break;
-                case 'FIN':
-                    status = 'Terminé';
-                    statusCode = 'TERMINE';
-                    endTime = event.HeureFin ? formatDateTime(event.HeureFin) : 
-                             (event.DateCreation ? formatDateTime(event.DateCreation) : null);
-                    break;
-            }
+            const firstEvent = relatedEvents[0];
             
             return {
-                id: event.NoEnreg,
-                operatorId: event.CodeRubrique,
-                operatorName: event.operatorName || 'Non assigné',
-                lancementCode: event.CodeLanctImprod,
-                article: event.Article || 'N/A',
-                articleDetail: event.ArticleDetail || '',
-                startTime: startTime,
-                endTime: endTime,
-                pauseTime: null, // Pas de calcul de pause pour les événements individuels
-                duration: null, // Pas de calcul de durée pour les événements individuels
-                pauseDuration: null,
-                status: status,
-                statusCode: statusCode,
-                generalStatus: statusCode,
-                events: 1, // Chaque ligne représente un événement
+                id: lancement.id,
+                operatorId: lancement.operatorId,
+                operatorName: firstEvent?.operatorName || 'Non assigné',
+                lancementCode: lancement.lancementCode,
+                article: firstEvent?.Article || 'N/A',
+                articleDetail: firstEvent?.ArticleDetail || '',
+                startTime: lancement.startTime,
+                endTime: lancement.endTime,
+                pauseTime: lancement.pauseTime,
+                duration: lancement.duration,
+                pauseDuration: lancement.pauseDuration,
+                status: lancement.status,
+                statusCode: lancement.statusCode,
+                generalStatus: lancement.generalStatus,
+                events: lancement.events,
                 editable: true
             };
         });
 
-        console.log('🎯 Envoi de', formattedOperations.length, 'événements individuels');
-        return formattedOperations;
+        console.log(`🎯 Envoi de ${formattedOperations.length} lancements regroupés (page ${page}/${Math.ceil(processedLancements.length / limit)})`);
+        return {
+            operations: formattedOperations,
+            pagination: {
+                currentPage: page,
+                totalPages: Math.ceil(processedLancements.length / limit),
+                totalItems: processedLancements.length,
+                itemsPerPage: limit,
+                hasNextPage: page < Math.ceil(processedLancements.length / limit),
+                hasPrevPage: page > 1
+            }
+        };
 
     } catch (error) {
         console.error('❌ Erreur lors de la récupération des opérations:', error);
@@ -542,12 +1026,14 @@ router.put('/operations/:id', async (req, res) => {
         // Seules les heures sont modifiables
         if (startTime !== undefined) {
             updateFields.push('HeureDebut = @startTime');
-            params.startTime = startTime ? new Date(startTime) : null;
+            params.startTime = formatTimeForSQL(startTime);
+            console.log(`🔧 startTime: ${startTime} -> ${params.startTime}`);
         }
         
         if (endTime !== undefined) {
             updateFields.push('HeureFin = @endTime');
-            params.endTime = endTime ? new Date(endTime) : null;
+            params.endTime = formatTimeForSQL(endTime);
+            console.log(`🔧 endTime: ${endTime} -> ${params.endTime}`);
         }
         
         // Ignorer les autres champs
@@ -567,6 +1053,9 @@ router.put('/operations/:id', async (req, res) => {
             SET ${updateFields.join(', ')}
             WHERE NoEnreg = @id
         `;
+        
+        console.log(`🔧 Requête de mise à jour:`, updateQuery);
+        console.log(`🔧 Paramètres:`, params);
         
         await executeQuery(updateQuery, params);
         
@@ -664,18 +1153,21 @@ router.delete('/operations/:id', async (req, res) => {
     try {
         const { id } = req.params;
         
-        console.log(`🗑️ Suppression opération ${id}`);
+        console.log(`🗑️ Suppression opération ${id} (type: ${typeof id})`);
         
         // D'abord, récupérer les informations du lancement à partir de l'ID
         const getLancementQuery = `
             SELECT CodeLanctImprod, CodeRubrique 
             FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
-            WHERE NoEnreg = ${parseInt(id)}
+            WHERE NoEnreg = @id
         `;
         
-        const lancementInfo = await executeQuery(getLancementQuery);
+        const lancementInfo = await executeQuery(getLancementQuery, { id: parseInt(id) });
+        
+        console.log(`🔍 Résultat de la requête pour ID ${id}:`, lancementInfo);
         
         if (lancementInfo.length === 0) {
+            console.log(`❌ Aucune opération trouvée avec l'ID ${id}`);
             return res.status(404).json({
                 success: false,
                 error: 'Opération non trouvée'
@@ -689,10 +1181,13 @@ router.delete('/operations/:id', async (req, res) => {
         // Supprimer TOUS les événements de ce lancement
         const deleteAllQuery = `
             DELETE FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
-            WHERE CodeLanctImprod = '${CodeLanctImprod}' AND CodeRubrique = '${CodeRubrique}'
+            WHERE CodeLanctImprod = @lancementCode AND CodeRubrique = @operatorCode
         `;
         
-        await executeQuery(deleteAllQuery);
+        await executeQuery(deleteAllQuery, { 
+            lancementCode: CodeLanctImprod, 
+            operatorCode: CodeRubrique 
+        });
         
         console.log(`✅ Tous les événements du lancement ${CodeLanctImprod} supprimés avec succès`);
         
@@ -1030,6 +1525,66 @@ router.get('/debug/ident-values', async (req, res) => {
     } catch (error) {
         console.error('Erreur debug ident:', error);
         res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// GET /api/admin/validate-lancement/:code - Valider un code de lancement
+router.get('/validate-lancement/:code', async (req, res) => {
+    try {
+        const { code } = req.params;
+        
+        console.log(`🔍 Validation du code lancement: ${code}`);
+        
+        // Valider le format du code (LT + 7 chiffres)
+        const codePattern = /^LT\d{7}$/;
+        if (!codePattern.test(code)) {
+            return res.json({
+                success: false,
+                valid: false,
+                error: 'Format invalide. Le code doit être au format LT + 7 chiffres (ex: LT2501145)'
+            });
+        }
+        
+        // Vérifier l'existence dans la base de données
+        const validationQuery = `
+            SELECT TOP 1 
+                CodeLancement,
+                DesignationLct1,
+                DesignationLct2,
+                StatutLancement
+            FROM [SEDI_ERP].[dbo].[LCTE] 
+            WHERE CodeLancement = @code
+        `;
+        
+        const result = await executeQuery(validationQuery, { code });
+        
+        if (result.length === 0) {
+            return res.json({
+                success: true,
+                valid: false,
+                error: 'Code de lancement non trouvé dans la base de données'
+            });
+        }
+        
+        const lancement = result[0];
+        
+        res.json({
+            success: true,
+            valid: true,
+            data: {
+                code: lancement.CodeLancement,
+                designation: lancement.DesignationLct1,
+                designationDetail: lancement.DesignationLct2,
+                statut: lancement.StatutLancement
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Erreur validation code lancement:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Erreur serveur lors de la validation'
+        });
     }
 });
 
@@ -1546,4 +2101,389 @@ router.post('/create-historique-table', async (req, res) => {
     }
 });
 
+// Route de debug pour tester la logique de tous les lancements
+router.get('/debug/all-lancements-status', async (req, res) => {
+    try {
+        console.log('🔍 Debug de tous les lancements...');
+        
+        // Récupérer tous les événements
+        const eventsQuery = `
+            SELECT 
+                h.NoEnreg,
+                h.Ident,
+                h.CodeLanctImprod,
+                h.CodeRubrique,
+                h.HeureDebut,
+                h.HeureFin,
+                h.DateCreation
+            FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS] h
+            ORDER BY h.CodeLanctImprod, h.CodeRubrique, h.DateCreation ASC
+        `;
+        
+        const events = await executeQuery(eventsQuery);
+        
+        // Grouper par lancement
+        const lancementGroups = {};
+        events.forEach(event => {
+            const key = `${event.CodeLanctImprod}_${event.CodeRubrique}`;
+            if (!lancementGroups[key]) {
+                lancementGroups[key] = [];
+            }
+            lancementGroups[key].push(event);
+        });
+        
+        const analysis = [];
+        
+        Object.keys(lancementGroups).forEach(key => {
+            const groupEvents = lancementGroups[key].sort((a, b) => 
+                new Date(a.DateCreation) - new Date(b.DateCreation)
+            );
+            
+            const [lancementCode, operatorCode] = key.split('_');
+            const lastEvent = groupEvents[groupEvents.length - 1];
+            const finEvent = groupEvents.find(e => e.Ident === 'FIN');
+            const pauseEvents = groupEvents.filter(e => e.Ident === 'PAUSE');
+            const repriseEvents = groupEvents.filter(e => e.Ident === 'REPRISE');
+            
+            // Déterminer le statut selon la nouvelle logique
+            let currentStatus = 'EN_COURS';
+            if (finEvent) {
+                currentStatus = 'TERMINE';
+            } else if (lastEvent.Ident === 'PAUSE') {
+                currentStatus = 'PAUSE';
+            } else if (lastEvent.Ident === 'REPRISE') {
+                currentStatus = 'EN_COURS';
+            }
+            
+            analysis.push({
+                lancementCode,
+                operatorCode,
+                totalEvents: groupEvents.length,
+                pauseEvents: pauseEvents.length,
+                repriseEvents: repriseEvents.length,
+                lastEvent: lastEvent ? {
+                    ident: lastEvent.Ident,
+                    date: lastEvent.DateCreation,
+                    heure: lastEvent.HeureDebut
+                } : null,
+                currentStatus,
+                isFinished: !!finEvent,
+                events: groupEvents.map(e => ({
+                    id: e.NoEnreg,
+                    ident: e.Ident,
+                    date: e.DateCreation,
+                    heure: e.HeureDebut
+                }))
+            });
+        });
+        
+        console.log(`📊 Analyse de ${analysis.length} lancements terminée`);
+        
+        res.json({
+            success: true,
+            totalLancements: analysis.length,
+            analysis: analysis.sort((a, b) => a.lancementCode.localeCompare(b.lancementCode))
+        });
+        
+    } catch (error) {
+        console.error('❌ Erreur debug tous les lancements:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Erreur lors du debug de tous les lancements',
+            details: error.message
+        });
+    }
+});
+
+// Route pour nettoyer les données de test et créer des pauses terminées
+router.post('/debug/create-test-pause-reprise', async (req, res) => {
+    try {
+        console.log('🧪 Création de données de test pause/reprise...');
+        
+        const { operatorCode = '929', lancementCode = 'LT2501148' } = req.body;
+        
+        // Créer une pause terminée pour tester
+        const pauseQuery = `
+            INSERT INTO [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
+            (OperatorCode, CodeLanctImprod, CodeRubrique, Ident, Phase, Statut, HeureDebut, HeureFin, DateCreation)
+            VALUES (
+                '${operatorCode}',
+                '${lancementCode}',
+                'PRODUCTION',
+                'PAUSE',
+                'PRODUCTION',
+                'EN_PAUSE',
+                CAST('14:30:00' AS TIME),
+                NULL,
+                CAST(GETDATE() AS DATE)
+            )
+        `;
+        
+        const repriseQuery = `
+            INSERT INTO [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
+            (OperatorCode, CodeLanctImprod, CodeRubrique, Ident, Phase, Statut, HeureDebut, HeureFin, DateCreation)
+            VALUES (
+                '${operatorCode}',
+                '${lancementCode}',
+                'PRODUCTION',
+                'REPRISE',
+                'PRODUCTION',
+                'EN_COURS',
+                CAST('14:45:00' AS TIME),
+                NULL,
+                CAST(GETDATE() AS DATE)
+            )
+        `;
+        
+        await executeQuery(pauseQuery);
+        await executeQuery(repriseQuery);
+        
+        console.log('✅ Données de test créées');
+        
+        res.json({
+            success: true,
+            message: 'Données de test pause/reprise créées',
+            data: {
+                operatorCode,
+                lancementCode,
+                pauseTime: '14:30:00',
+                repriseTime: '14:45:00'
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Erreur création données test:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Erreur lors de la création des données de test',
+            details: error.message
+        });
+    }
+});
+
+// Route de debug pour voir tous les lancements avec leurs pauses
+router.get('/debug/all-pauses', async (req, res) => {
+    try {
+        console.log('🔍 Debug de tous les lancements avec pauses...');
+        
+        // Récupérer tous les événements
+        const eventsQuery = `
+            SELECT 
+                h.NoEnreg,
+                h.Ident,
+                h.CodeLanctImprod,
+                h.CodeRubrique,
+                h.HeureDebut,
+                h.HeureFin,
+                h.DateCreation
+            FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS] h
+            ORDER BY h.CodeLanctImprod, h.CodeRubrique, h.DateCreation ASC
+        `;
+        
+        const events = await executeQuery(eventsQuery);
+        
+        // Grouper par lancement
+        const lancementGroups = {};
+        events.forEach(event => {
+            const key = `${event.CodeLanctImprod}_${event.CodeRubrique}`;
+            if (!lancementGroups[key]) {
+                lancementGroups[key] = [];
+            }
+            lancementGroups[key].push(event);
+        });
+        
+        const analysis = [];
+        
+        Object.keys(lancementGroups).forEach(key => {
+            const groupEvents = lancementGroups[key].sort((a, b) => 
+                new Date(a.DateCreation) - new Date(b.DateCreation)
+            );
+            
+            const [lancementCode, operatorCode] = key.split('_');
+            const pauseEvents = groupEvents.filter(e => e.Ident === 'PAUSE');
+            const repriseEvents = groupEvents.filter(e => e.Ident === 'REPRISE');
+            
+            analysis.push({
+                lancementCode,
+                operatorCode,
+                totalEvents: groupEvents.length,
+                pauseEvents: pauseEvents.length,
+                repriseEvents: repriseEvents.length,
+                events: groupEvents.map(e => ({
+                    id: e.NoEnreg,
+                    ident: e.Ident,
+                    date: e.DateCreation,
+                    heure: e.HeureDebut
+                })),
+                pauseAnalysis: pauseEvents.map(pause => {
+                    const reprise = repriseEvents.find(r => 
+                        new Date(r.DateCreation) > new Date(pause.DateCreation) &&
+                        r.CodeLanctImprod === pause.CodeLanctImprod &&
+                        r.CodeRubrique === pause.CodeRubrique
+                    );
+                    return {
+                        pauseId: pause.NoEnreg,
+                        pauseDate: pause.DateCreation,
+                        pauseHeure: pause.HeureDebut,
+                        hasReprise: !!reprise,
+                        repriseDate: reprise ? reprise.DateCreation : null,
+                        repriseHeure: reprise ? reprise.HeureDebut : null,
+                        status: reprise ? 'PAUSE_TERMINEE' : 'PAUSE'
+                    };
+                })
+            });
+        });
+        
+        res.json({
+            success: true,
+            totalLancements: analysis.length,
+            analysis: analysis.sort((a, b) => a.lancementCode.localeCompare(b.lancementCode))
+        });
+        
+    } catch (error) {
+        console.error('❌ Erreur debug toutes les pauses:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Erreur lors du debug de toutes les pauses',
+            details: error.message
+        });
+    }
+});
+
+// Route de debug pour tester la logique pause/reprise
+router.get('/debug/pause-reprise/:lancementCode', async (req, res) => {
+    try {
+        const { lancementCode } = req.params;
+        
+        console.log(`🔍 Debug pause/reprise pour le lancement ${lancementCode}...`);
+        
+        // Récupérer tous les événements pour ce lancement
+        const eventsQuery = `
+            SELECT 
+                h.NoEnreg,
+                h.Ident,
+                h.CodeLanctImprod,
+                h.CodeRubrique,
+                h.HeureDebut,
+                h.HeureFin,
+                h.DateCreation
+            FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS] h
+            WHERE h.CodeLanctImprod = '${lancementCode}'
+            ORDER BY h.DateCreation ASC, h.NoEnreg ASC
+        `;
+        
+        const events = await executeQuery(eventsQuery);
+        
+        // Analyser les événements
+        const pauseEvents = events.filter(e => e.Ident === 'PAUSE');
+        const repriseEvents = events.filter(e => e.Ident === 'REPRISE');
+        
+        console.log(`📊 Événements trouvés pour ${lancementCode}:`, {
+            total: events.length,
+            pauses: pauseEvents.length,
+            reprises: repriseEvents.length,
+            events: events.map(e => ({
+                id: e.NoEnreg,
+                ident: e.Ident,
+                operator: e.CodeRubrique,
+                date: e.DateCreation,
+                heure: e.HeureDebut
+            }))
+        });
+        
+        res.json({
+            success: true,
+            lancementCode,
+            analysis: {
+                totalEvents: events.length,
+                pauseEvents: pauseEvents.length,
+                repriseEvents: repriseEvents.length,
+                events: events.map(e => ({
+                    id: e.NoEnreg,
+                    ident: e.Ident,
+                    operator: e.CodeRubrique,
+                    date: e.DateCreation,
+                    heure: e.HeureDebut
+                })),
+                pauseReprisePairs: pauseEvents.map(pause => {
+                    const reprise = repriseEvents.find(r => 
+                        new Date(r.DateCreation) > new Date(pause.DateCreation) &&
+                        r.CodeLanctImprod === pause.CodeLanctImprod &&
+                        r.CodeRubrique === pause.CodeRubrique
+                    );
+                    return {
+                        pause: {
+                            id: pause.NoEnreg,
+                            date: pause.DateCreation,
+                            heure: pause.HeureDebut
+                        },
+                        reprise: reprise ? {
+                            id: reprise.NoEnreg,
+                            date: reprise.DateCreation,
+                            heure: reprise.HeureDebut
+                        } : null,
+                        status: reprise ? 'PAUSE_TERMINEE' : 'PAUSE'
+                    };
+                })
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Erreur debug pause/reprise:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Erreur lors du debug pause/reprise',
+            details: error.message
+        });
+    }
+});
+
+// Route de test pour vérifier le format HH:mm
+router.get('/test/time-format', async (req, res) => {
+    try {
+        console.log('🧪 Test du format HH:mm...');
+        
+        // Tests de formatTimeForSQL
+        const testCases = [
+            '14:30',      // Format HH:mm standard
+            '09:15',      // Format HH:mm avec zéro
+            '14:30:45',   // Format HH:mm:ss existant
+            '9:5',        // Format H:m (sans zéros)
+            null,         // Valeur null
+            '',           // Chaîne vide
+            'invalid'     // Format invalide
+        ];
+        
+        const results = testCases.map(input => ({
+            input: input,
+            output: formatTimeForSQL(input),
+            type: typeof input
+        }));
+        
+        console.log('🧪 Résultats des tests:', results);
+        
+        res.json({
+            success: true,
+            message: 'Tests du format HH:mm terminés',
+            format: 'HH:mm → HH:mm:ss (pour SQL)',
+            tests: results,
+            examples: {
+                'Frontend': '14:30',
+                'API': '14:30', 
+                'SQL': '14:30:00',
+                'Display': '14:30'
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Erreur test format:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Erreur lors du test du format'
+        });
+    }
+});
+
 module.exports = router;
+module.exports.processLancementEventsWithPauses = processLancementEventsWithPauses;
+module.exports.getAdminOperations = getAdminOperations;

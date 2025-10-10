@@ -34,19 +34,29 @@ class TimeUtils {
         return 0;
     }
 
-    // Formater une date selon les préférences
+    // Formater une date selon les préférences (fuseau horaire Paris)
     static formatDate(date, format = 'DD/MM/YYYY HH:mm') {
         if (!date) return '-';
         
         const d = new Date(date);
         if (isNaN(d.getTime())) return '-';
 
-        const day = d.getDate().toString().padStart(2, '0');
-        const month = (d.getMonth() + 1).toString().padStart(2, '0');
-        const year = d.getFullYear();
-        const hours = d.getHours().toString().padStart(2, '0');
-        const minutes = d.getMinutes().toString().padStart(2, '0');
-        const seconds = d.getSeconds().toString().padStart(2, '0');
+        // Utiliser fuseau horaire français (Europe/Paris)
+        const options = {
+            timeZone: 'Europe/Paris',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        };
+
+        const formatted = d.toLocaleString('fr-FR', options);
+        const [datePart, timePart] = formatted.split(' ');
+        const [day, month, year] = datePart.split('/');
+        const [hours, minutes, seconds] = timePart.split(':');
 
         return format
             .replace('DD', day)

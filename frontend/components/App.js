@@ -1,5 +1,5 @@
 // Classe principale de l'application
-import OperateurInterface from './OperateurInterface.js?v=20251007-final';
+import OperateurInterface from './OperateurInterface.js?v=20251010-fixed';
 import AdminPage from './AdminPage.js?v=20251007-final';
 import ApiService from '../services/ApiService.js?v=20251007-final';
 import StorageService from '../services/StorageService.js?v=20251007-final';
@@ -185,6 +185,8 @@ class App {
             if (!this.adminPage) {
                 console.log('🆕 Création nouvelle AdminPage');
                 this.adminPage = new AdminPage(this);
+                // Rendre adminPage accessible globalement pour la pagination
+                window.adminPage = this.adminPage;
             } else {
                 console.log('♻️ Utilisation AdminPage existante');
             }

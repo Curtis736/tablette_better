@@ -8,7 +8,7 @@ class TimeUtils {
      */
     static getCurrentTime() {
         const now = new Date();
-        // Utiliser toLocaleTimeString directement avec le fuseau horaire français
+        // Utiliser toLocaleTimeString avec fuseau horaire français (Europe/Paris)
         const timeString = now.toLocaleTimeString("fr-FR", {
             timeZone: "Europe/Paris",
             hour: '2-digit',
@@ -25,7 +25,7 @@ class TimeUtils {
      */
     static getCurrentDate() {
         const now = new Date();
-        // Utiliser toLocaleDateString directement avec le fuseau horaire français
+        // Utiliser toLocaleDateString avec fuseau horaire français (Europe/Paris)
         const dateString = now.toLocaleDateString("fr-CA", {
             timeZone: "Europe/Paris"
         });

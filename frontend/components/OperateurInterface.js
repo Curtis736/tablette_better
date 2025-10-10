@@ -15,11 +15,26 @@ class OperateurInterface {
         this.totalPausedTime = 0;
         this.pauseStartTime = null;
         
+        // Debouncing pour éviter les clics répétés
+        this.lastActionTime = 0;
+        this.actionCooldown = 1000; // 1 seconde entre les actions
+        
         this.initializeElements();
         this.setupEventListeners();
         this.initializeLancementInput();
         this.checkCurrentOperation();
         this.loadOperatorHistory();
+    }
+
+    // Vérifier si une action peut être exécutée (debouncing)
+    canPerformAction() {
+        const now = Date.now();
+        if (now - this.lastActionTime < this.actionCooldown) {
+            this.notificationManager.warning('Veuillez attendre avant de relancer une action');
+            return false;
+        }
+        this.lastActionTime = now;
+        return true;
     }
 
     initializeElements() {
@@ -33,6 +48,7 @@ class OperateurInterface {
         this.stopBtn = document.getElementById('stopBtn');
         this.timerDisplay = document.getElementById('timerDisplay');
         this.statusDisplay = document.getElementById('statusDisplay');
+        this.endTimeDisplay = document.getElementById('endTimeDisplay');
         
         // Éléments pour l'historique
         this.refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
@@ -42,6 +58,7 @@ class OperateurInterface {
         // Debug des éléments historique
         console.log('refreshHistoryBtn trouvé:', !!this.refreshHistoryBtn);
         console.log('operatorHistoryTableBody trouvé:', !!this.operatorHistoryTableBody);
+        console.log('endTimeDisplay trouvé:', !!this.endTimeDisplay);
         
         // Modifier le placeholder pour indiquer la saisie manuelle
         this.lancementInput.placeholder = "Saisir le code de lancement...";
@@ -234,24 +251,29 @@ class OperateurInterface {
         
         this.lancementDetails.innerHTML = `
             <strong>Code: ${operation.CodeLancement}</strong><br>
-            <small>Opération en cours depuis ${new Date(operation.DateTravail).toLocaleTimeString()}</small>
+            <small>Opération en cours depuis ${new Date(operation.DateTravail).toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' })}</small>
         `;
         
         this.timerInterval = setInterval(() => this.updateTimer(), 1000);
         this.lancementInput.disabled = true;
+        
+        // Mettre à jour l'heure de fin immédiatement
+        this.updateEndTime();
     }
 
     resumePausedOperation(operation) {
         this.isRunning = false;
+        this.isPaused = true;
+        this.currentLancement = { CodeLancement: operation.CodeLancement };
         
         this.startBtn.disabled = false;
-        this.startBtn.textContent = 'Reprendre';
+        this.startBtn.innerHTML = '<i class="fas fa-play"></i> Reprendre';
         this.stopBtn.disabled = false;
         this.statusDisplay.textContent = 'En pause';
         
         this.lancementDetails.innerHTML = `
             <strong>Code: ${operation.CodeLancement}</strong><br>
-            <small>Opération en pause depuis ${new Date(operation.DateTravail).toLocaleTimeString()}</small>
+            <small>Opération en pause depuis ${new Date(operation.DateTravail).toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' })}</small>
         `;
         
         this.lancementInput.disabled = true;
@@ -275,7 +297,6 @@ class OperateurInterface {
                 // Reprendre l'opération en pause
                 await this.apiService.resumeOperation(this.operator.id, code);
                 this.notificationManager.success('Opération reprise');
-                this.startBtn.textContent = 'Démarrer';
             } else {
                 // Démarrer nouvelle opération
                 await this.apiService.startOperation(this.operator.id, code);
@@ -291,6 +312,9 @@ class OperateurInterface {
             this.lancementInput.disabled = true;
             this.isPaused = false;
             
+            // Actualiser l'historique après démarrage
+            this.loadOperatorHistory();
+            
         } catch (error) {
             console.error('Erreur:', error);
             this.notificationManager.error(error.message || 'Erreur de connexion');
@@ -300,16 +324,21 @@ class OperateurInterface {
     async handlePause() {
         if (!this.currentLancement) return;
         
+        if (!this.canPerformAction()) return;
+        
         try {
             await this.apiService.pauseOperation(this.operator.id, this.currentLancement.CodeLancement);
             
             this.pauseTimer();
             this.startBtn.disabled = false;
-            this.startBtn.textContent = 'Reprendre';
+            this.startBtn.innerHTML = '<i class="fas fa-play"></i> Reprendre';
             this.pauseBtn.disabled = true;
             this.statusDisplay.textContent = 'En pause';
             this.notificationManager.info('Opération mise en pause');
             this.isPaused = true;
+            
+            // Actualiser l'historique après pause
+            this.loadOperatorHistory();
             
         } catch (error) {
             console.error('Erreur:', error);
@@ -320,7 +349,12 @@ class OperateurInterface {
     async handleStop() {
         if (!this.currentLancement) return;
         
+        if (!this.canPerformAction()) return;
+        
         try {
+            // Définir l'heure de fin avant d'arrêter
+            this.setFinalEndTime();
+            
             const result = await this.apiService.stopOperation(this.operator.id, this.currentLancement.CodeLancement);
             
             this.stopTimer();
@@ -333,6 +367,9 @@ class OperateurInterface {
             this.lancementInput.disabled = false;
             this.lancementInput.placeholder = "Saisir un nouveau code de lancement...";
             this.controlsSection.style.display = 'none';
+            
+            // Actualiser l'historique après arrêt
+            this.loadOperatorHistory();
             
         } catch (error) {
             console.error('Erreur:', error);
@@ -370,12 +407,15 @@ class OperateurInterface {
 
     resetControls() {
         this.startBtn.disabled = false;
-        this.startBtn.textContent = 'Démarrer';
+        this.startBtn.innerHTML = '<i class="fas fa-play"></i> Démarrer';
         this.pauseBtn.disabled = true;
         this.stopBtn.disabled = true;
         this.stopTimer();
         this.statusDisplay.textContent = 'En attente';
         this.isPaused = false;
+        if (this.endTimeDisplay) {
+            this.endTimeDisplay.textContent = '--:--';
+        }
     }
 
     updateTimer() {
@@ -384,6 +424,46 @@ class OperateurInterface {
         const now = new Date();
         const elapsed = Math.floor((now - this.startTime - this.totalPausedTime) / 1000);
         this.timerDisplay.textContent = TimeUtils.formatDuration(Math.max(0, elapsed));
+        
+        // Mettre à jour l'heure de fin estimée
+        this.updateEndTime();
+    }
+
+    updateEndTime() {
+        if (!this.endTimeDisplay) {
+            console.warn('⚠️ endTimeDisplay non trouvé, impossible de mettre à jour l\'heure de fin');
+            return;
+        }
+        
+        if (!this.isRunning || !this.startTime) {
+            this.endTimeDisplay.textContent = '--:--';
+            return;
+        }
+        
+        // Afficher l'heure actuelle comme heure de fin en cours
+        const now = new Date();
+        
+        // Formater l'heure de fin
+        this.endTimeDisplay.textContent = now.toLocaleTimeString('fr-FR', {
+            timeZone: 'Europe/Paris',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    setFinalEndTime() {
+        if (!this.endTimeDisplay) {
+            console.warn('⚠️ endTimeDisplay non trouvé, impossible de définir l\'heure de fin');
+            return;
+        }
+        
+        // Afficher l'heure de fin définitive quand l'opération se termine
+        const now = new Date();
+        this.endTimeDisplay.textContent = now.toLocaleTimeString('fr-FR', {
+            timeZone: 'Europe/Paris',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
     }
 
     // Méthodes de compatibilité
@@ -469,8 +549,17 @@ class OperateurInterface {
             console.log(`Phase pour ${operation.lancementCode}:`, operation.phase);
             
             const row = document.createElement('tr');
+            
+            // Ajouter une classe spéciale pour les lignes de pause
+            if (operation.type === 'pause') {
+                row.classList.add('pause-row');
+                if (operation.statusCode === 'PAUSE_TERMINEE') {
+                    row.classList.add('pause-terminee');
+                }
+            }
+            
             row.innerHTML = `
-                <td>${operation.lancementCode || '-'}</td>
+                <td>${operation.lancementCode || '-'} ${operation.type === 'pause' ? '<i class="fas fa-pause-circle pause-icon"></i>' : ''}</td>
                 <td>${operation.article || '-'}</td>
                 <td>${operation.phase || 'PRODUCTION'}</td>
                 <td>${operation.startTime || '-'}</td>

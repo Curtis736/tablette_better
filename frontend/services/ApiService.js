@@ -21,11 +21,55 @@ class ApiService {
             'Content-Type': 'application/json'
         };
         
+        // Rate limiting côté client
+        this.requestQueue = [];
+        this.isProcessing = false;
+        this.lastRequestTime = 0;
+        this.minRequestInterval = 100; // 100ms minimum entre les requêtes
+        
         console.log(`🔗 ApiService configuré pour: ${this.baseUrl}`);
     }
 
-    // Méthode générique pour les requêtes
+    // Méthode générique pour les requêtes avec rate limiting
     async request(endpoint, options = {}) {
+        return new Promise((resolve, reject) => {
+            this.requestQueue.push({ endpoint, options, resolve, reject });
+            this.processQueue();
+        });
+    }
+
+    // Traitement de la file d'attente avec rate limiting
+    async processQueue() {
+        if (this.isProcessing || this.requestQueue.length === 0) {
+            return;
+        }
+
+        this.isProcessing = true;
+
+        while (this.requestQueue.length > 0) {
+            const now = Date.now();
+            const timeSinceLastRequest = now - this.lastRequestTime;
+            
+            if (timeSinceLastRequest < this.minRequestInterval) {
+                await new Promise(resolve => setTimeout(resolve, this.minRequestInterval - timeSinceLastRequest));
+            }
+
+            const { endpoint, options, resolve, reject } = this.requestQueue.shift();
+            this.lastRequestTime = Date.now();
+
+            try {
+                const result = await this.executeRequest(endpoint, options);
+                resolve(result);
+            } catch (error) {
+                reject(error);
+            }
+        }
+
+        this.isProcessing = false;
+    }
+
+    // Exécution réelle de la requête
+    async executeRequest(endpoint, options = {}) {
         const url = `${this.baseUrl}${endpoint}`;
         const config = {
             headers: { ...this.defaultHeaders, ...options.headers },
@@ -36,6 +80,33 @@ class ApiService {
             const response = await fetch(url, config);
             
             if (!response.ok) {
+                // Gestion spéciale pour l'erreur 429
+                if (response.status === 429) {
+                    console.warn(`⚠️ Rate limit atteint pour ${endpoint}, attente de 3 secondes...`);
+                    
+                    // Essayer de récupérer le message d'erreur du serveur
+                    let errorMessage = 'Trop de requêtes, veuillez patienter';
+                    try {
+                        const errorData = await response.json();
+                        errorMessage = errorData.error || errorMessage;
+                    } catch (e) {
+                        // Ignorer si on ne peut pas parser le JSON
+                    }
+                    
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    
+                    // Retry une fois
+                    console.log(`🔄 Retry pour ${endpoint}...`);
+                    const retryResponse = await fetch(url, config);
+                    if (!retryResponse.ok) {
+                        if (retryResponse.status === 429) {
+                            throw new Error(errorMessage);
+                        }
+                        throw new Error(`HTTP ${retryResponse.status}: ${retryResponse.statusText}`);
+                    }
+                    return await retryResponse.json();
+                }
+                
                 const errorData = await response.json().catch(() => ({}));
                 throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
             }
@@ -212,6 +283,38 @@ class ApiService {
     // Export
     async exportOperations(date, format = 'csv') {
         return this.get(`/admin/export/${format}`, { date });
+    }
+    
+    // Validation automatique d'un code de lancement
+    async validateLancementCode(code) {
+        try {
+            console.log(`🔍 Validation du code: ${code}`);
+            
+            const response = await fetch(`${this.baseUrl}/admin/validate-lancement/${encodeURIComponent(code)}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...this.defaultHeaders
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Erreur HTTP: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            console.log(`✅ Résultat validation:`, result);
+            
+            return result;
+            
+        } catch (error) {
+            console.error('❌ Erreur validation code lancement:', error);
+            return {
+                success: false,
+                valid: false,
+                error: 'Erreur de connexion lors de la validation'
+            };
+        }
     }
 }
 

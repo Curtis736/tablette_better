@@ -8,6 +8,14 @@ class AdminPage {
         this.notificationManager = app.getNotificationManager();
         this.operations = [];
         this.stats = {};
+        this.pagination = null;
+        this.currentPage = 1;
+        
+        // Système de sauvegarde automatique
+        this.autoSaveEnabled = true;
+        this.autoSaveInterval = 30000; // 30 secondes
+        this.pendingChanges = new Map(); // Map des modifications en attente
+        this.autoSaveTimer = null;
         
         console.log('AdminPage constructor - Initialisation');
         console.log('ApiService:', this.apiService);
@@ -16,6 +24,7 @@ class AdminPage {
         // Initialisation immédiate (le DOM devrait être prêt maintenant)
         this.initializeElements();
         this.setupEventListeners();
+        this.startAutoSave();
     }
 
     initializeElements() {
@@ -133,6 +142,16 @@ class AdminPage {
                 fetch('http://localhost:3000/api/admin/operators')
             ]);
             
+            // Vérifier les erreurs de rate limiting
+            if (adminResponse.status === 429) {
+                this.showRateLimitWarning();
+                return;
+            }
+            if (operatorsResponse.status === 429) {
+                this.showRateLimitWarning();
+                return;
+            }
+            
             const data = await adminResponse.json();
             const operatorsData = await operatorsResponse.json();
             
@@ -141,10 +160,13 @@ class AdminPage {
             
             if (data.operations) {
                 this.operations = data.operations;
+                this.pagination = data.pagination;
                 console.log('OPERATIONS ASSIGNEES:', this.operations.length);
+                console.log('PAGINATION:', this.pagination);
             } else {
                 console.log('PAS D\'OPERATIONS DANS LA REPONSE');
                 this.operations = [];
+                this.pagination = null;
             }
             
             if (data.stats) {
@@ -166,6 +188,9 @@ class AdminPage {
             console.log('🔄 APPEL updateOperationsTable()');
             this.updateOperationsTable();
             
+            console.log('🔄 APPEL updatePaginationInfo()');
+            this.updatePaginationInfo();
+            
             console.log('✅ FIN loadData()');
         } catch (error) {
             console.error('❌ ERREUR loadData():', error);
@@ -180,6 +205,60 @@ class AdminPage {
         this.activeLancements.textContent = this.stats.activeLancements || 0;
         this.pausedLancements.textContent = this.stats.pausedLancements || 0;
         this.completedLancements.textContent = this.stats.completedLancements || 0;
+    }
+
+    showRateLimitWarning() {
+        console.warn('⚠️ Rate limit atteint - affichage du message d\'avertissement');
+        
+        // Afficher un message d'erreur dans l'interface
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'rate-limit-warning';
+        errorDiv.innerHTML = `
+            <div style="
+                background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+                color: white;
+                padding: 16px 20px;
+                border-radius: 12px;
+                margin: 20px;
+                text-align: center;
+                box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+                animation: slideIn 0.3s ease-out;
+            ">
+                <i class="fas fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 8px;"></i>
+                <h3 style="margin: 0 0 8px 0; font-size: 18px;">Trop de requêtes</h3>
+                <p style="margin: 0; opacity: 0.9;">
+                    Le serveur est temporairement surchargé. Veuillez patienter quelques secondes avant de recharger.
+                </p>
+                <button onclick="this.parentElement.parentElement.remove(); window.adminPage.loadData();" 
+                        style="
+                            background: rgba(255,255,255,0.2);
+                            border: 1px solid rgba(255,255,255,0.3);
+                            color: white;
+                            padding: 8px 16px;
+                            border-radius: 6px;
+                            margin-top: 12px;
+                            cursor: pointer;
+                            transition: all 0.2s ease;
+                        "
+                        onmouseover="this.style.background='rgba(255,255,255,0.3)'"
+                        onmouseout="this.style.background='rgba(255,255,255,0.2)'">
+                    <i class="fas fa-refresh"></i> Réessayer
+                </button>
+            </div>
+        `;
+        
+        // Insérer le message au début du contenu principal
+        const mainContent = document.querySelector('.admin-content') || document.querySelector('main');
+        if (mainContent) {
+            mainContent.insertBefore(errorDiv, mainContent.firstChild);
+        }
+        
+        // Auto-supprimer après 10 secondes
+        setTimeout(() => {
+            if (errorDiv.parentElement) {
+                errorDiv.remove();
+            }
+        }, 10000);
     }
 
     updateOperatorSelect(operators) {
@@ -382,18 +461,44 @@ class AdminPage {
             const formattedStartTime = this.formatDateTime(operation.startTime);
             const formattedEndTime = this.formatDateTime(operation.endTime);
             
+            // Validation des heures incohérentes
+            let timeWarning = '';
+            if (formattedStartTime && formattedEndTime && formattedStartTime !== '-' && formattedEndTime !== '-') {
+                const [startHours, startMinutes] = formattedStartTime.split(':').map(Number);
+                const [endHours, endMinutes] = formattedEndTime.split(':').map(Number);
+                
+                const startTotalMinutes = startHours * 60 + startMinutes;
+                const endTotalMinutes = endHours * 60 + endMinutes;
+                
+                // Si l'heure de fin est avant l'heure de début (et pas de traversée de minuit)
+                if (endTotalMinutes < startTotalMinutes && endTotalMinutes > 0) {
+                    timeWarning = ' ⚠️';
+                    console.warn(`⚠️ Heures incohérentes pour ${operation.lancementCode}: ${formattedStartTime} -> ${formattedEndTime}`);
+                }
+            }
+            
             console.log(`⏰ Heures formatées pour ${operation.lancementCode}:`, {
                 startTime: `${operation.startTime} -> ${formattedStartTime}`,
-                endTime: `${operation.endTime} -> ${formattedEndTime}`
+                endTime: `${operation.endTime} -> ${formattedEndTime}`,
+                warning: timeWarning ? 'Heures incohérentes détectées' : 'OK'
             });
             
             const row = document.createElement('tr');
+            
+            // Ajouter une classe spéciale pour les lignes de pause
+            if (operation.type === 'pause') {
+                row.classList.add('pause-row');
+                if (operation.statusCode === 'PAUSE_TERMINEE') {
+                    row.classList.add('pause-terminee');
+                }
+            }
+            
             row.innerHTML = `
                 <td>${operation.operatorName || '-'}</td>
-                <td>${operation.lancementCode || '-'}</td>
+                <td>${operation.lancementCode || '-'} ${operation.type === 'pause' ? '<i class="fas fa-pause-circle pause-icon"></i>' : ''}</td>
                 <td>${operation.article || '-'}</td>
                 <td>${formattedStartTime}</td>
-                <td>${formattedEndTime}</td>
+                <td>${formattedEndTime}${timeWarning}</td>
                 <td>
                     <span class="status-badge status-${operation.statusCode}">${operation.status}</span>
                 </td>
@@ -422,13 +527,27 @@ class AdminPage {
             }
         }
         
-        // Sinon, essayer de formater comme une date complète
+        // Si c'est un objet Date, extraire l'heure avec fuseau horaire français
+        if (dateString instanceof Date) {
+            return dateString.toLocaleTimeString('fr-FR', {
+                timeZone: 'Europe/Paris',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+        }
+        
+        // Sinon, essayer de formater comme une date complète avec fuseau horaire Paris
         try {
             const date = new Date(dateString);
             if (!isNaN(date.getTime())) {
-                const hours = date.getHours().toString().padStart(2, '0');
-                const minutes = date.getMinutes().toString().padStart(2, '0');
-                return `${hours}:${minutes}`;
+                // Utiliser fuseau horaire français (Europe/Paris)
+                return date.toLocaleTimeString('fr-FR', {
+                    timeZone: 'Europe/Paris',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
             }
         } catch (error) {
             console.warn('Erreur formatage heure:', dateString, error);
@@ -443,9 +562,308 @@ class AdminPage {
             'active': 'En cours',
             'paused': 'En pause',
             'completed': 'Terminé',
-            'started': 'Démarré'
+            'started': 'Démarré',
+            'TERMINE': 'Terminé',
+            'PAUSE': 'En pause',
+            'EN_COURS': 'En cours',
+            'PAUSE_TERMINEE': 'Pause terminée'
         };
         return statusMap[status] || status;
+    }
+    
+    // ===== SYSTÈME DE SAUVEGARDE AUTOMATIQUE =====
+    
+    startAutoSave() {
+        if (this.autoSaveEnabled) {
+            this.autoSaveTimer = setInterval(() => {
+                this.processAutoSave();
+            }, this.autoSaveInterval);
+            
+            console.log(`🔄 Sauvegarde automatique activée (${this.autoSaveInterval/1000}s)`);
+        }
+    }
+    
+    stopAutoSave() {
+        if (this.autoSaveTimer) {
+            clearInterval(this.autoSaveTimer);
+            this.autoSaveTimer = null;
+            console.log('⏹️ Sauvegarde automatique désactivée');
+        }
+    }
+    
+    addPendingChange(operationId, field, value) {
+        if (!this.pendingChanges.has(operationId)) {
+            this.pendingChanges.set(operationId, {});
+        }
+        
+        const operationChanges = this.pendingChanges.get(operationId);
+        operationChanges[field] = value;
+        
+        console.log(`📝 Modification en attente pour ${operationId}:`, operationChanges);
+        
+        // Sauvegarde immédiate pour les modifications critiques
+        if (field === 'startTime' || field === 'endTime') {
+            this.saveOperationImmediately(operationId, operationChanges);
+        }
+    }
+    
+    async processAutoSave() {
+        if (this.pendingChanges.size === 0) {
+            return;
+        }
+        
+        console.log(`💾 Sauvegarde automatique de ${this.pendingChanges.size} modifications...`);
+        
+        const savePromises = [];
+        
+        for (const [operationId, changes] of this.pendingChanges) {
+            if (Object.keys(changes).length > 0) {
+                savePromises.push(this.saveOperationChanges(operationId, changes));
+            }
+        }
+        
+        try {
+            await Promise.all(savePromises);
+            this.pendingChanges.clear();
+            console.log('✅ Sauvegarde automatique terminée');
+            
+            // Notification discrète
+            this.showAutoSaveNotification('Modifications sauvegardées automatiquement');
+            
+        } catch (error) {
+            console.error('❌ Erreur sauvegarde automatique:', error);
+            this.showAutoSaveNotification('Erreur lors de la sauvegarde automatique', 'error');
+        }
+    }
+    
+    async saveOperationImmediately(operationId, changes) {
+        try {
+            await this.saveOperationChanges(operationId, changes);
+            this.pendingChanges.delete(operationId);
+            console.log(`⚡ Sauvegarde immédiate réussie pour ${operationId}`);
+        } catch (error) {
+            console.error(`❌ Erreur sauvegarde immédiate ${operationId}:`, error);
+        }
+    }
+    
+    async saveOperationChanges(operationId, changes) {
+        const operation = this.operations.find(op => op.id == operationId);
+        if (!operation) {
+            throw new Error(`Opération ${operationId} non trouvée`);
+        }
+        
+        const updateData = {
+            ...changes,
+            id: operationId
+        };
+        
+        const result = await this.apiService.updateOperation(updateData);
+        
+        if (result.success) {
+            // Mettre à jour l'opération locale
+            Object.assign(operation, changes);
+            console.log(`✅ Opération ${operationId} mise à jour:`, changes);
+        } else {
+            throw new Error(result.error || 'Erreur lors de la mise à jour');
+        }
+        
+        return result;
+    }
+    
+    showAutoSaveNotification(message, type = 'success') {
+        if (this.notificationManager) {
+            this.notificationManager.show(message, type, 3000);
+        } else {
+            // Fallback si pas de notification manager
+            console.log(`📢 ${message}`);
+        }
+    }
+    
+    // ===== VALIDATION AUTOMATIQUE DES CODES LANCEMENT =====
+    
+    async validateLancementCode(code) {
+        if (!code || code.length < 3) {
+            return { valid: false, error: 'Code trop court' };
+        }
+        
+        try {
+            const result = await this.apiService.validateLancementCode(code);
+            return result;
+        } catch (error) {
+            console.error('❌ Erreur validation code:', error);
+            return { valid: false, error: 'Erreur de validation' };
+        }
+    }
+    
+    setupLancementValidation(inputElement) {
+        let validationTimeout;
+        
+        inputElement.addEventListener('input', (e) => {
+            const code = e.target.value.trim();
+            
+            // Annuler la validation précédente
+            if (validationTimeout) {
+                clearTimeout(validationTimeout);
+            }
+            
+            // Validation différée (éviter trop d'appels API)
+            validationTimeout = setTimeout(async () => {
+                if (code.length >= 3) {
+                    await this.performLancementValidation(inputElement, code);
+                } else {
+                    this.clearValidationFeedback(inputElement);
+                }
+            }, 500);
+        });
+    }
+    
+    async performLancementValidation(inputElement, code) {
+        // Ajouter indicateur de chargement
+        inputElement.classList.add('validating');
+        
+        try {
+            const result = await this.validateLancementCode(code);
+            
+            if (result.valid) {
+                this.showValidationSuccess(inputElement, result.data);
+            } else {
+                this.showValidationError(inputElement, result.error);
+            }
+            
+        } catch (error) {
+            this.showValidationError(inputElement, 'Erreur de validation');
+        } finally {
+            inputElement.classList.remove('validating');
+        }
+    }
+    
+    showValidationSuccess(inputElement, data) {
+        inputElement.classList.remove('validation-error');
+        inputElement.classList.add('validation-success');
+        
+        // Ajouter un tooltip avec les infos
+        const tooltip = document.createElement('div');
+        tooltip.className = 'validation-tooltip success';
+        tooltip.innerHTML = `
+            <strong>✅ Code valide</strong><br>
+            ${data.designation}<br>
+            <small>Statut: ${data.statut}</small>
+        `;
+        
+        inputElement.parentNode.appendChild(tooltip);
+        
+        // Supprimer le tooltip après 3 secondes
+        setTimeout(() => {
+            if (tooltip.parentNode) {
+                tooltip.parentNode.removeChild(tooltip);
+            }
+        }, 3000);
+    }
+    
+    showValidationError(inputElement, error) {
+        inputElement.classList.remove('validation-success');
+        inputElement.classList.add('validation-error');
+        
+        // Ajouter un tooltip d'erreur
+        const tooltip = document.createElement('div');
+        tooltip.className = 'validation-tooltip error';
+        tooltip.innerHTML = `<strong>❌ ${error}</strong>`;
+        
+        inputElement.parentNode.appendChild(tooltip);
+        
+        // Supprimer le tooltip après 5 secondes
+        setTimeout(() => {
+            if (tooltip.parentNode) {
+                tooltip.parentNode.removeChild(tooltip);
+            }
+        }, 5000);
+    }
+    
+    clearValidationFeedback(inputElement) {
+        inputElement.classList.remove('validation-success', 'validation-error', 'validating');
+        
+        // Supprimer les tooltips existants
+        const existingTooltips = inputElement.parentNode.querySelectorAll('.validation-tooltip');
+        existingTooltips.forEach(tooltip => tooltip.remove());
+    }
+
+    cleanTimeValue(timeString) {
+        if (!timeString) return '';
+        
+        // Si c'est déjà au format HH:mm, le retourner directement
+        if (typeof timeString === 'string' && /^\d{2}:\d{2}$/.test(timeString)) {
+            return timeString;
+        }
+        
+        // Si c'est au format HH:mm:ss, enlever les secondes
+        if (typeof timeString === 'string' && /^\d{2}:\d{2}:\d{2}$/.test(timeString)) {
+            return timeString.substring(0, 5);
+        }
+        
+        // Si c'est au format H:mm ou H:m, ajouter le zéro manquant
+        if (typeof timeString === 'string' && /^\d{1,2}:\d{1,2}$/.test(timeString)) {
+            const parts = timeString.split(':');
+            const hours = parts[0].padStart(2, '0');
+            const minutes = parts[1].padStart(2, '0');
+            return `${hours}:${minutes}`;
+        }
+        
+        console.warn(`⚠️ Format d'heure non reconnu pour nettoyage: "${timeString}"`);
+        return '';
+    }
+
+    formatTimeForInput(timeString) {
+        if (!timeString) return '';
+        
+        console.log(`🔧 formatTimeForInput: "${timeString}"`);
+        
+        // Si c'est déjà au format HH:mm, le retourner directement
+        if (typeof timeString === 'string' && /^\d{2}:\d{2}$/.test(timeString)) {
+            console.log(`✅ Format HH:mm direct: ${timeString}`);
+            return timeString;
+        }
+        
+        // Si c'est au format HH:mm:ss, enlever les secondes
+        if (typeof timeString === 'string' && /^\d{2}:\d{2}:\d{2}$/.test(timeString)) {
+            const result = timeString.substring(0, 5);
+            console.log(`✅ Format HH:mm:ss → HH:mm: ${timeString} → ${result}`);
+            return result;
+        }
+        
+        // Si c'est une date complète, extraire seulement l'heure
+        if (typeof timeString === 'string' && timeString.includes('T')) {
+            try {
+                const date = new Date(timeString);
+                if (!isNaN(date.getTime())) {
+                    // Utiliser toLocaleTimeString avec fuseau horaire français
+                    const formattedTime = date.toLocaleTimeString('fr-FR', {
+                        timeZone: 'Europe/Paris',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                    });
+                    console.log(`✅ Date complète → HH:mm: ${timeString} → ${formattedTime}`);
+                    return formattedTime;
+                }
+            } catch (error) {
+                console.warn('Erreur parsing date:', timeString, error);
+            }
+        }
+        
+        // Si c'est un objet Date, extraire l'heure avec fuseau horaire français
+        if (timeString instanceof Date) {
+            const formattedTime = timeString.toLocaleTimeString('fr-FR', {
+                timeZone: 'Europe/Paris',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            console.log(`✅ Date object → HH:mm: ${timeString} → ${formattedTime}`);
+            return formattedTime;
+        }
+        
+        console.warn(`⚠️ Format d'heure non reconnu: "${timeString}" (type: ${typeof timeString})`);
+        return '';
     }
 
     formatDateTimeForInput(dateString) {
@@ -491,27 +909,44 @@ class AdminPage {
             return;
         }
         
+        // Sauvegarder et nettoyer les valeurs originales
+        const originalStartTime = this.cleanTimeValue(operation.startTime || '');
+        const originalEndTime = this.cleanTimeValue(operation.endTime || '');
+        
+        console.log(`🔧 Valeurs originales sauvegardées:`, {
+            startTime: `${operation.startTime} → ${originalStartTime}`,
+            endTime: `${operation.endTime} → ${originalEndTime}`
+        });
+        
         // Remplacer les cellules par des inputs
         const cells = row.querySelectorAll('td');
         
         // Heure Début (index 3)
         const startTimeCell = cells[3];
         startTimeCell.innerHTML = `
-            <input type="datetime-local" 
-                   value="${this.formatDateTimeForInput(operation.startTime)}" 
-                   data-id="${id}" 
-                   data-field="startTime"
-                   class="edit-input">
+            <div class="time-input-container">
+                <input type="time" 
+                       value="${originalStartTime}" 
+                       data-id="${id}" 
+                       data-field="startTime"
+                       data-original="${originalStartTime}"
+                       class="time-input"
+                       step="60">
+            </div>
         `;
         
         // Heure Fin (index 4)
         const endTimeCell = cells[4];
         endTimeCell.innerHTML = `
-            <input type="datetime-local" 
-                   value="${operation.endTime ? this.formatDateTimeForInput(operation.endTime) : ''}" 
-                   data-id="${id}" 
-                   data-field="endTime"
-                   class="edit-input">
+            <div class="time-input-container">
+                <input type="time" 
+                       value="${originalEndTime}" 
+                       data-id="${id}" 
+                       data-field="endTime"
+                       data-original="${originalEndTime}"
+                       class="time-input"
+                       step="60">
+            </div>
         `;
         
         // Actions (index 6)
@@ -531,6 +966,30 @@ class AdminPage {
         
         saveBtn.addEventListener('click', () => this.saveOperation(id));
         cancelBtn.addEventListener('click', () => this.cancelEdit(id));
+        
+        // Ajouter des event listeners pour détecter les modifications automatiques
+        const timeInputs = row.querySelectorAll('.time-input');
+        timeInputs.forEach(input => {
+            const originalValue = input.getAttribute('data-original');
+            
+            // Détecter les changements automatiques
+            input.addEventListener('change', () => {
+                const currentValue = input.value;
+                console.log(`🔍 Changement détecté sur ${input.dataset.field}:`, {
+                    original: originalValue,
+                    current: currentValue,
+                    changed: currentValue !== originalValue
+                });
+            });
+            
+            // Détecter les modifications par le navigateur
+            input.addEventListener('input', () => {
+                const currentValue = input.value;
+                if (currentValue !== originalValue) {
+                    console.log(`⚠️ Modification automatique détectée sur ${input.dataset.field}: ${originalValue} → ${currentValue}`);
+                }
+            });
+        });
     }
 
     cancelEdit(id) {
@@ -544,12 +1003,47 @@ class AdminPage {
             const startTimeInput = document.querySelector(`input[data-id="${id}"][data-field="startTime"]`);
             const endTimeInput = document.querySelector(`input[data-id="${id}"][data-field="endTime"]`);
             
-            const updateData = {
-                startTime: startTimeInput.value,
-                endTime: endTimeInput.value || null
-            };
+            // Récupérer les valeurs originales
+            const originalStartTime = startTimeInput.getAttribute('data-original');
+            const originalEndTime = endTimeInput.getAttribute('data-original');
+            
+            // Vérifier si les valeurs ont vraiment changé
+            const startTimeChanged = startTimeInput.value !== originalStartTime;
+            const endTimeChanged = endTimeInput.value !== originalEndTime;
+            
+            console.log(`🔧 Comparaison des valeurs pour ${id}:`, {
+                startTime: {
+                    original: originalStartTime,
+                    current: startTimeInput.value,
+                    changed: startTimeChanged
+                },
+                endTime: {
+                    original: originalEndTime,
+                    current: endTimeInput.value,
+                    changed: endTimeChanged
+                }
+            });
+            
+            // Si aucune valeur n'a changé, ne pas envoyer de requête
+            if (!startTimeChanged && !endTimeChanged) {
+                console.log(`ℹ️ Aucune modification détectée pour l'opération ${id}`);
+                this.notificationManager.info('Aucune modification détectée');
+                this.loadData(); // Recharger pour revenir à l'état normal
+                return;
+            }
+            
+            const updateData = {};
+            
+            // Ajouter seulement les champs qui ont changé
+            if (startTimeChanged) {
+                updateData.startTime = startTimeInput.value;
+            }
+            
+            if (endTimeChanged) {
+                updateData.endTime = endTimeInput.value || null;
+            }
 
-            console.log(` Sauvegarde opération ${id}:`, updateData);
+            console.log(`💾 Sauvegarde opération ${id}:`, updateData);
 
             const response = await this.apiService.updateOperation(id, updateData);
             
@@ -759,6 +1253,55 @@ class AdminPage {
             'ARRET': 'danger'
         };
         return classMap[ident] || 'light';
+    }
+
+    // Méthodes de pagination
+    async loadPage(page) {
+        if (this.isLoading) return;
+        
+        try {
+            this.isLoading = true;
+            this.currentPage = page;
+            
+            const response = await fetch(`http://localhost:3000/api/admin/operations?page=${page}&limit=25`);
+            const data = await response.json();
+            
+            if (data.operations) {
+                this.operations = data.operations;
+                this.pagination = data.pagination;
+                this.updateOperationsTable();
+                this.updatePaginationInfo();
+            }
+        } catch (error) {
+            console.error('Erreur lors du chargement de la page:', error);
+            this.notificationManager.error('Erreur lors du chargement de la page');
+        } finally {
+            this.isLoading = false;
+        }
+    }
+
+    updatePaginationInfo() {
+        const paginationInfo = document.getElementById('paginationInfo');
+        if (paginationInfo && this.pagination) {
+            paginationInfo.innerHTML = `
+                <div class="pagination-info">
+                    <span>Page ${this.pagination.currentPage} sur ${this.pagination.totalPages}</span>
+                    <span>(${this.pagination.totalItems} éléments au total)</span>
+                    <div class="pagination-controls">
+                        <button class="btn btn-sm btn-outline-primary" 
+                                onclick="window.adminPage.loadPage(${this.pagination.currentPage - 1})"
+                                ${!this.pagination.hasPrevPage ? 'disabled' : ''}>
+                            ← Précédent
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary"
+                                onclick="window.adminPage.loadPage(${this.pagination.currentPage + 1})"
+                                ${!this.pagination.hasNextPage ? 'disabled' : ''}>
+                            Suivant →
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
     }
 }
 

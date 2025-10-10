@@ -46,6 +46,140 @@ body {
     max-width: 500px;
 }
 
+/* Inputs de temps pour l'édition */
+.time-input-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.time-input {
+    width: 100px;
+    padding: 8px 12px;
+    border: 2px solid #e1e5e9;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: center;
+    background: white;
+    color: #333;
+    transition: all 0.2s ease;
+    font-family: 'Segoe UI', monospace;
+}
+
+.time-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    background: #f8f9ff;
+}
+
+.time-input:hover {
+    border-color: #667eea;
+    background: #f8f9ff;
+}
+
+/* Masquer les icônes de calendrier sur les inputs time */
+.time-input::-webkit-calendar-picker-indicator {
+    display: none;
+}
+
+.time-input::-webkit-inner-spin-button,
+.time-input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Style pour les inputs time sur Firefox */
+.time-input::-moz-calendar-picker-indicator {
+    display: none;
+}
+
+/* Pagination */
+.pagination-container {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.pagination-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.pagination-info span {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.pagination-controls {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.pagination-controls .btn {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    border-radius: 4px;
+    border: 1px solid #6c5ce7;
+    background: white;
+    color: #6c5ce7;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.pagination-controls .btn:hover:not(:disabled) {
+    background: #6c5ce7;
+    color: white;
+}
+
+.pagination-controls .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-color: #dee2e6;
+    color: #6c757d;
+}
+
+/* Styles pour les lignes de pause */
+.pause-row {
+    background-color: #fff3cd !important;
+    border-left: 4px solid #ffc107;
+}
+
+.pause-row:hover {
+    background-color: #ffeaa7 !important;
+}
+
+.pause-icon {
+    color: #ffc107;
+    margin-left: 8px;
+    font-size: 0.9rem;
+}
+
+.status-badge.status-PAUSE {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.status-badge.status-PAUSE_TERMINEE {
+    background-color: #28a745;
+    color: white;
+}
+
+.pause-row.pause-terminee {
+    background-color: #d4edda !important;
+    border-left: 4px solid #28a745;
+}
+
+.pause-row.pause-terminee:hover {
+    background-color: #c3e6cb !important;
+}
+
 /* Styles spécifiques pour l'écran admin */
 #adminLoginScreen .login-container {
     border: 2px solid #e74c3c;
@@ -300,11 +434,44 @@ body {
 }
 
 /* Contrôles */
+.controls-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    gap: 2rem;
+    flex-wrap: wrap;
+}
+
 .controls {
     display: flex;
     gap: 1rem;
-    margin-bottom: 2rem;
     flex-wrap: wrap;
+}
+
+.end-time-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: #f8f9fa;
+    padding: 1rem 1.5rem;
+    border-radius: 10px;
+    border: 2px solid #e9ecef;
+    min-width: 180px;
+}
+
+.end-time-label {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+
+.end-time-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #667eea;
+    font-family: 'Courier New', monospace;
 }
 
 /* Timer */
@@ -482,11 +649,22 @@ tr:hover {
         padding: 1rem;
     }
     
+    .controls-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+    }
+    
     .controls {
         flex-direction: column;
     }
     
     .controls button {
+        width: 100%;
+    }
+    
+    .end-time-display {
+        min-width: auto;
         width: 100%;
     }
     
@@ -534,6 +712,24 @@ tr:hover {
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+}
+
+/* Animation pour les messages d'avertissement */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Style pour les messages de rate limiting */
+.rate-limit-warning {
+    position: relative;
+    z-index: 1000;
 }
 
 /* Styles pour l'édition admin */
@@ -929,22 +1125,57 @@ tr:hover {
 .filter-select, .filter-input {
     padding: 12px 16px;
     border: 2px solid #dee2e6;
-    border-radius: 8px;
+    border-radius: 12px;
     font-size: 16px;
     background-color: white;
     min-height: 48px;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .filter-select:focus, .filter-input:focus {
     outline: none;
     border-color: #007bff;
-    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25), 0 4px 8px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+}
+
+.filter-select:hover, .filter-input:hover {
+    border-color: #007bff;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .filter-input::placeholder {
     color: #6c757d;
     font-style: italic;
+}
+
+.btn-reset {
+    padding: 12px 20px;
+    background: linear-gradient(135deg, #6c757d, #495057);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 48px;
+}
+
+.btn-reset:hover {
+    background: linear-gradient(135deg, #5a6268, #343a40);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btn-reset:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 /* Responsive pour les filtres */

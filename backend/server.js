@@ -26,10 +26,20 @@ app.use(cors({
     credentials: true
 }));
 
-// Rate limiting
+// Rate limiting - plus permissif en développement
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100 // limite de 100 requêtes par IP
+    max: process.env.NODE_ENV === 'production' ? 100 : 1000, // 100 en prod, 1000 en dev
+    message: {
+        error: 'Trop de requêtes, veuillez patienter',
+        retryAfter: Math.ceil(15 * 60 * 1000 / 1000) // en secondes
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => {
+        // Skip rate limiting pour les requêtes de santé
+        return req.path === '/api/health';
+    }
 });
 app.use(limiter);
 
@@ -40,12 +50,26 @@ app.use(express.urlencoded({ extended: true }));
 // Logging
 app.use(morgan('combined'));
 
+// Rate limiting spécifique pour les routes admin (plus permissif)
+const adminLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000, // 1 minute
+    max: process.env.NODE_ENV === 'production' ? 30 : 100, // 30 en prod, 100 en dev
+    message: {
+        error: 'Trop de requêtes admin, veuillez patienter',
+        retryAfter: 60
+    },
+    skip: (req) => {
+        // Skip pour les requêtes de santé
+        return req.path === '/api/health';
+    }
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/operators', operatorRoutes);
 app.use('/api/lancements', lancementRoutes);
 app.use('/api/operations', operationRoutes);
-app.use('/api/admin', adminRoutes);
+app.use('/api/admin', adminLimiter, adminRoutes);
 
 // Route de santé
 app.get('/api/health', (req, res) => {
