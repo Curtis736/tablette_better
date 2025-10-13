@@ -1,23 +1,60 @@
-# SEDI Tablette v2.1 - Configuration Docker
+# SEDI Tablette v2.2 - Configuration Docker
+
+## 🆕 Nouveautés v2.2
+- ✅ **Gestion des pauses terminées** : Affichage correct des pauses avec heure de fin
+- ✅ **Styles visuels améliorés** : Pauses terminées en vert, pauses en cours en jaune
+- ✅ **Correction erreurs JavaScript** : Plus d'erreurs dans l'interface opérateur
+- ✅ **Logique backend optimisée** : Correspondance PAUSE/REPRISE améliorée
+- ✅ **Routes de debug** : Outils pour tester et diagnostiquer les pauses
+
+## 📁 Structure des fichiers
+
+```
+docker/
+├── docker-compose.yml          # Configuration principale
+├── docker-compose.dev.yml      # Configuration développement
+├── docker-compose.prod.yml     # Configuration production
+├── Dockerfile.backend          # Image backend Node.js
+├── Dockerfile.frontend         # Image frontend Nginx
+├── nginx.conf                  # Configuration Nginx production
+├── nginx.dev.conf              # Configuration Nginx développement
+├── env.production              # Variables d'environnement production
+├── deploy.sh                   # Script de déploiement universel
+├── deploy-production.ps1        # Script PowerShell production
+├── deploy-production.sh         # Script Bash production
+└── README.md                   # Cette documentation
+```
+
+### Fichiers supprimés lors du nettoyage
+- `CHANGELOG.md` - Intégré dans le README principal
+- `REBUILD-SUMMARY.md` - Fichier temporaire de rebuild
+- `deploy-clean.ps1` et `deploy-clean.sh` - Scripts redondants
+- Fichiers temporaires (*.log, *.tmp, *.bak)
 
 ## 🚀 Déploiement rapide
 
-### Production
+### Déploiement Production
 ```bash
-# Démarrer en production
-docker-compose up -d
+# Script PowerShell (Windows)
+.\deploy-production.ps1
 
-# Ou utiliser le script de déploiement
-./deploy.sh prod
+# Script Bash (Linux/Mac)
+./deploy-production.sh
+
+# Manuel
+docker-compose -f docker-compose.prod.yml up -d
 ```
 
-### Développement
+### Déploiement Développement
 ```bash
-# Démarrer en développement
-docker-compose -f docker/docker-compose.dev.yml up -d
+# Manuel
+docker-compose -f docker-compose.dev.yml up -d
+```
 
-# Ou utiliser le script de déploiement
-./deploy.sh dev
+### Déploiement Général
+```bash
+# Script universel
+./deploy.sh
 ```
 
 ## 📋 Services

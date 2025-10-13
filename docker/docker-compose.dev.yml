@@ -2,7 +2,7 @@ services:
   # Backend SEDI Tablette en mode développement
   sedi-backend-dev:
     build:
-      context: .
+      context: ..
       dockerfile: docker/Dockerfile.backend
       target: development
     container_name: sedi-tablette-backend-dev
@@ -35,7 +35,7 @@ services:
     labels:
       - "com.sedi.service=backend-dev"
       - "com.sedi.environment=development"
-      - "com.sedi.version=2.1"
+      - "com.sedi.version=2.2"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 10s
@@ -63,7 +63,7 @@ services:
     labels:
       - "com.sedi.service=frontend-dev"
       - "com.sedi.environment=development"
-      - "com.sedi.version=2.1"
+      - "com.sedi.version=2.2"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/health"]
       interval: 10s

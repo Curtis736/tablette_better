@@ -2,7 +2,7 @@ services:
   # Backend API SEDI Tablette
   sedi-backend:
     build:
-      context: .
+      context: ..
       dockerfile: docker/Dockerfile.backend
     container_name: sedi-tablette-backend
     environment:
@@ -32,8 +32,8 @@ services:
       - /etc/localtime:/etc/localtime:ro
     labels:
       - "com.sedi.service=backend"
-      - "com.sedi.version=2.1"
-      - "com.sedi.description=SEDI Tablette Backend API with Filters"
+      - "com.sedi.version=2.2"
+      - "com.sedi.description=SEDI Tablette Backend API with Pause Management"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
@@ -44,7 +44,7 @@ services:
   # Frontend Nginx SEDI Tablette
   sedi-frontend:
     build:
-      context: .
+      context: ..
       dockerfile: docker/Dockerfile.frontend
     container_name: sedi-tablette-frontend
     ports:
@@ -60,8 +60,8 @@ services:
       - /etc/localtime:/etc/localtime:ro
     labels:
       - "com.sedi.service=frontend"
-      - "com.sedi.version=2.1"
-      - "com.sedi.description=SEDI Tablette Frontend with Advanced Filters"
+      - "com.sedi.version=2.2"
+      - "com.sedi.description=SEDI Tablette Frontend with Pause Management"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/health"]
       interval: 30s

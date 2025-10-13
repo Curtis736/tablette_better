@@ -38,8 +38,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
 
 # Labels pour la traçabilité
 LABEL maintainer="SEDI Team" \
-      version="2.1" \
-      description="SEDI Tablette Frontend with Advanced Filters" \
+      version="2.2" \
+      description="SEDI Tablette Frontend with Pause Management" \
       com.sedi.component="frontend"
 
 # Utiliser dumb-init (root pour les permissions Nginx)

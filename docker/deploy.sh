@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script de déploiement SEDI Tablette Docker
+# Script de déploiement SEDI Tablette Docker v2.2
 # Usage: ./deploy.sh [dev|prod] [--build] [--logs]
 
 set -e
@@ -200,7 +200,7 @@ done
 
 # Exécution principale
 main() {
-    log_info "=== Déploiement SEDI Tablette ==="
+    log_info "=== Déploiement SEDI Tablette v2.2 ==="
     
     check_prerequisites
     

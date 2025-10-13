@@ -51,6 +51,12 @@ ENV NODE_ENV=production \
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:3000/api/health || exit 1
 
+# Labels pour la traçabilité
+LABEL maintainer="SEDI Team" \
+      version="2.2" \
+      description="SEDI Tablette Backend API with Pause Management" \
+      com.sedi.component="backend"
+
 # Utiliser dumb-init pour une gestion propre des signaux
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "server.js"]
