@@ -24,6 +24,7 @@ jobs:
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
+        cache-dependency-path: 'backend/package-lock.json'
         
     - name: Install backend dependencies
       run: |
@@ -68,6 +69,7 @@ jobs:
       with:
         node-version: '18.x'
         cache: 'npm'
+        cache-dependency-path: 'backend/package-lock.json'
         
     - name: Install dependencies
       run: |
@@ -98,6 +100,7 @@ jobs:
       with:
         node-version: '18.x'
         cache: 'npm'
+        cache-dependency-path: 'backend/package-lock.json'
         
     - name: Install backend dependencies
       run: |
@@ -130,6 +133,7 @@ jobs:
       with:
         node-version: '18.x'
         cache: 'npm'
+        cache-dependency-path: 'backend/package-lock.json'
         
     - name: Install dependencies
       run: |
