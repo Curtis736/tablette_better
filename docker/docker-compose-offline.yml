@@ -7,7 +7,7 @@ services:
     command: ["npm", "start"]
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=3001
       - DB_SERVER=SERVEURERP
       - DB_DATABASE=SEDI_ERP
       - DB_USER=QUALITE
@@ -23,7 +23,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
       - SESSION_SECRET=${SESSION_SECRET:-change-me-in-production}
     ports:
-      - "3000:3000"
+      - "3001:3001"
     networks:
       - sedi-network
     restart: unless-stopped

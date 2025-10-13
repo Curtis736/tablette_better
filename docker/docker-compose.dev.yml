@@ -8,7 +8,7 @@ services:
     container_name: sedi-tablette-backend-dev
     environment:
       - NODE_ENV=development
-      - PORT=3000
+      - PORT=3001
       - DB_SERVER=SERVEURERP
       - DB_DATABASE=SEDI_ERP
       - DB_USER=QUALITE
@@ -21,7 +21,7 @@ services:
       - API_TIMEOUT=30000
       - CACHE_ENABLED=false
     ports:
-      - "3000:3000"
+      - "3001:3001"
       - "9229:9229"  # Port de debug Node.js
     volumes:
       - ./backend:/app
@@ -37,7 +37,7 @@ services:
       - "com.sedi.environment=development"
       - "com.sedi.version=2.2"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
       interval: 10s
       timeout: 5s
       retries: 3

@@ -7,7 +7,7 @@ services:
     container_name: sedi-tablette-backend
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=3001
       - DB_SERVER=SERVEURERP
       - DB_DATABASE=SEDI_ERP
       - DB_USER=QUALITE
@@ -23,7 +23,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
       - SESSION_SECRET=${SESSION_SECRET:-change-me-in-production}
     ports:
-      - "3000:3000"
+      - "3001:3001"
     networks:
       - sedi-network
     restart: unless-stopped
@@ -35,7 +35,7 @@ services:
       - "com.sedi.version=2.2"
       - "com.sedi.description=SEDI Tablette Backend API with Pause Management"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
