@@ -1,0 +1,19 @@
+[Unit]
+Description=SEDI Tablette Docker Service
+Requires=docker.service
+After=docker.service
+StartLimitInterval=0
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/maintenance/Sedi_ati/tablette_better/docker
+ExecStart=/home/maintenance/Sedi_ati/tablette_better/docker/start-docker.sh
+ExecStop=/home/maintenance/Sedi_ati/tablette_better/docker/stop-docker.sh
+TimeoutStartSec=300
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

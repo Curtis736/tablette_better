@@ -1,0 +1,73 @@
+services:
+  # Backend API SEDI Tablette (sans build)
+  sedi-backend:
+    image: node:18-alpine
+    container_name: sedi-tablette-backend
+    working_dir: /app
+    command: ["npm", "start"]
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_SERVER=SERVEURERP
+      - DB_DATABASE=SEDI_ERP
+      - DB_USER=QUALITE
+      - DB_PASSWORD=QUALITE
+      - DB_ENCRYPT=false
+      - DB_TRUST_CERT=true
+      - FRONTEND_URL=http://localhost
+      - API_TIMEOUT=30000
+      - API_RETRY_ATTEMPTS=3
+      - CACHE_ENABLED=true
+      - CACHE_TTL=300000
+      - LOG_LEVEL=info
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - SESSION_SECRET=${SESSION_SECRET:-change-me-in-production}
+    ports:
+      - "3000:3000"
+    networks:
+      - sedi-network
+    restart: unless-stopped
+    volumes:
+      - ../backend:/app
+      - sedi-logs:/app/logs
+      - /etc/localtime:/etc/localtime:ro
+    labels:
+      - "com.sedi.service=backend"
+      - "com.sedi.version=2.2"
+      - "com.sedi.description=SEDI Tablette Backend API (Offline Mode)"
+
+  # Frontend Nginx SEDI Tablette (sans build)
+  sedi-frontend:
+    image: nginx:1.25-alpine
+    container_name: sedi-tablette-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - sedi-backend
+    networks:
+      - sedi-network
+    restart: unless-stopped
+    volumes:
+      - ../frontend:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - sedi-logs:/var/log/nginx
+      - /etc/localtime:/etc/localtime:ro
+    labels:
+      - "com.sedi.service=frontend"
+      - "com.sedi.version=2.2"
+      - "com.sedi.description=SEDI Tablette Frontend (Offline Mode)"
+
+networks:
+  sedi-network:
+    name: sedi-tablette-network
+    driver: bridge
+    labels:
+      - "com.sedi.network=main"
+
+volumes:
+  sedi-logs:
+    name: sedi-tablette-logs
+    driver: local
+    labels:
+      - "com.sedi.volume=logs"
+      - "com.sedi.description=Logs centralisés pour SEDI Tablette"
