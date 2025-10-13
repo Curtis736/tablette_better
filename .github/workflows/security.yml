@@ -1,0 +1,56 @@
+name: Security Tests
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'  # Every Monday at 2 AM
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+        cache: 'npm'
+        
+    - name: Install backend dependencies
+      run: |
+        cd backend
+        npm ci
+        
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm ci
+        
+    - name: Run backend security audit
+      run: |
+        cd backend
+        npm audit --audit-level=moderate
+        
+    - name: Run frontend security audit
+      run: |
+        cd frontend
+        npm audit --audit-level=moderate
+        
+    - name: Run security tests
+      run: |
+        cd backend
+        npm run test:security
+        
+    - name: Check for known vulnerabilities
+      run: |
+        echo "🔍 Checking for known security vulnerabilities..."
+        cd backend
+        npm audit --json > security-report.json || true
+        echo "Security audit completed"
