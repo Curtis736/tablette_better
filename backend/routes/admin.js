@@ -54,13 +54,29 @@ function formatTimeForSQL(timeInput) {
     if (!timeInput) return null;
     
     try {
+        console.log(`🔧 formatTimeForSQL input: "${timeInput}" (type: ${typeof timeInput})`);
+        
         // Si c'est déjà une chaîne au format HH:mm ou HH:mm:ss
         if (typeof timeInput === 'string') {
-            const timeMatch = timeInput.match(/^(\d{1,2}):(\d{2})(:(\d{2}))?$/);
+            // Nettoyer la chaîne (enlever espaces, etc.)
+            const cleanTime = timeInput.trim();
+            
+            // Format HH:mm
+            const timeMatch = cleanTime.match(/^(\d{1,2}):(\d{2})$/);
             if (timeMatch) {
                 const hours = timeMatch[1].padStart(2, '0');
                 const minutes = timeMatch[2];
-                const seconds = timeMatch[4] || '00';
+                const result = `${hours}:${minutes}:00`;
+                console.log(`🔧 formatTimeForSQL: ${timeInput} → ${result}`);
+                return result;
+            }
+            
+            // Format HH:mm:ss
+            const timeWithSecondsMatch = cleanTime.match(/^(\d{1,2}):(\d{2}):(\d{2})$/);
+            if (timeWithSecondsMatch) {
+                const hours = timeWithSecondsMatch[1].padStart(2, '0');
+                const minutes = timeWithSecondsMatch[2];
+                const seconds = timeWithSecondsMatch[3];
                 const result = `${hours}:${minutes}:${seconds}`;
                 console.log(`🔧 formatTimeForSQL: ${timeInput} → ${result}`);
                 return result;
@@ -86,6 +102,19 @@ function formatTimeForSQL(timeInput) {
         console.error('Erreur formatage heure SQL:', error);
         return null;
     }
+}
+
+// Fonction pour convertir une heure en minutes depuis minuit
+function timeToMinutes(timeString) {
+    if (!timeString) return 0;
+    
+    const parts = timeString.split(':');
+    if (parts.length < 2) return 0;
+    
+    const hours = parseInt(parts[0]) || 0;
+    const minutes = parseInt(parts[1]) || 0;
+    
+    return hours * 60 + minutes;
 }
 
 // Fonction pour valider les heures suspectes (comme 02:00 qui pourrait indiquer un problème)
@@ -1025,15 +1054,40 @@ router.put('/operations/:id', async (req, res) => {
         
         // Seules les heures sont modifiables
         if (startTime !== undefined) {
+            const formattedStartTime = formatTimeForSQL(startTime);
+            if (!formattedStartTime) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Format d\'heure de début invalide'
+                });
+            }
             updateFields.push('HeureDebut = @startTime');
-            params.startTime = formatTimeForSQL(startTime);
+            params.startTime = formattedStartTime;
             console.log(`🔧 startTime: ${startTime} -> ${params.startTime}`);
         }
         
         if (endTime !== undefined) {
+            const formattedEndTime = formatTimeForSQL(endTime);
+            if (!formattedEndTime) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Format d\'heure de fin invalide'
+                });
+            }
             updateFields.push('HeureFin = @endTime');
-            params.endTime = formatTimeForSQL(endTime);
+            params.endTime = formattedEndTime;
             console.log(`🔧 endTime: ${endTime} -> ${params.endTime}`);
+        }
+        
+        // Validation de cohérence des heures
+        if (params.startTime && params.endTime) {
+            const startMinutes = timeToMinutes(params.startTime);
+            const endMinutes = timeToMinutes(params.endTime);
+            
+            if (endMinutes < startMinutes) {
+                console.warn(`⚠️ Heure de fin (${params.endTime}) antérieure à l'heure de début (${params.startTime})`);
+                // Ne pas bloquer, juste avertir
+            }
         }
         
         // Ignorer les autres champs
@@ -1071,7 +1125,8 @@ router.put('/operations/:id', async (req, res) => {
         console.error('Erreur lors de la modification:', error);
         res.status(500).json({
             success: false,
-            error: 'Erreur lors de la modification de l\'opération'
+            error: 'Erreur lors de la modification de l\'opération',
+            details: error.message
         });
     }
 });

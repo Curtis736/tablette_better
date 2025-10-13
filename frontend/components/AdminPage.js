@@ -30,22 +30,38 @@ class AdminPage {
     initializeElements() {
         console.log('AdminPage.initializeElements() - Recherche des éléments DOM');
         
-        this.refreshDataBtn = document.getElementById('refreshDataBtn');
-        this.totalOperators = document.getElementById('totalOperators');
-        this.activeLancements = document.getElementById('activeLancements');
-        this.pausedLancements = document.getElementById('pausedLancements');
-        this.completedLancements = document.getElementById('completedLancements');
-        this.operationsTableBody = document.getElementById('operationsTableBody');
-        this.operatorSelect = document.getElementById('operatorFilter');
+        // Attendre que le DOM soit complètement chargé
+        const elements = {
+            refreshDataBtn: 'refreshDataBtn',
+            totalOperators: 'totalOperators',
+            activeLancements: 'activeLancements',
+            pausedLancements: 'pausedLancements',
+            completedLancements: 'completedLancements',
+            operationsTableBody: 'operationsTableBody',
+            operatorSelect: 'operatorFilter'
+        };
         
-        console.log('Éléments trouvés:');
-        console.log('  - refreshDataBtn:', !!this.refreshDataBtn);
-        console.log('  - operationsTableBody:', !!this.operationsTableBody);
-        console.log('  - operatorSelect:', !!this.operatorSelect);
+        // Initialiser les éléments avec vérification
+        Object.keys(elements).forEach(key => {
+            const elementId = elements[key];
+            this[key] = document.getElementById(elementId);
+            
+            if (!this[key]) {
+                console.warn(`⚠️ Élément non trouvé: ${elementId}`);
+                // Créer un élément de fallback pour éviter les erreurs
+                if (key === 'operationsTableBody') {
+                    this[key] = document.createElement('tbody');
+                    this[key].id = elementId;
+                }
+            } else {
+                console.log(`✅ Élément trouvé: ${elementId}`);
+            }
+        });
         
-        if (!this.operationsTableBody) {
-            console.error('ERREUR: operationsTableBody non trouvé!');
-        }
+        console.log('Éléments initialisés:', Object.keys(elements).map(key => ({
+            name: key,
+            found: !!this[key]
+        })));
     }
 
     addEventListenerSafe(elementId, eventType, handler) {
@@ -118,10 +134,10 @@ class AdminPage {
             }
         }, 300);
         
-        // Actualisation automatique
+        // Actualisation automatique avec retry en cas d'erreur
         this.refreshInterval = setInterval(() => {
             if (!this.isLoading) {
-                this.loadData();
+                this.loadDataWithRetry();
             }
         }, 60000);
     }
@@ -150,6 +166,14 @@ class AdminPage {
             if (operatorsResponse.status === 429) {
                 this.showRateLimitWarning();
                 return;
+            }
+            
+            // Vérifier les erreurs HTTP générales
+            if (!adminResponse.ok) {
+                throw new Error(`Erreur HTTP ${adminResponse.status}: ${adminResponse.statusText}`);
+            }
+            if (!operatorsResponse.ok) {
+                throw new Error(`Erreur HTTP ${operatorsResponse.status}: ${operatorsResponse.statusText}`);
             }
             
             const data = await adminResponse.json();
@@ -194,9 +218,51 @@ class AdminPage {
             console.log('✅ FIN loadData()');
         } catch (error) {
             console.error('❌ ERREUR loadData():', error);
-            this.notificationManager.error('Erreur de connexion au serveur');
+            
+            // Afficher un message d'erreur plus informatif
+            let errorMessage = 'Erreur de connexion au serveur';
+            if (error.message.includes('HTTP')) {
+                errorMessage = `Erreur serveur: ${error.message}`;
+            } else if (error.message.includes('fetch')) {
+                errorMessage = 'Impossible de contacter le serveur';
+            }
+            
+            this.notificationManager.error(errorMessage);
+            
+            // Afficher les données en cache si disponibles
+            if (this.operations.length > 0) {
+                this.notificationManager.info('Affichage des données en cache');
+                this.updateOperationsTable();
+            } else {
+                // Afficher un message dans le tableau
+                this.showNoDataMessage();
+            }
         } finally {
             this.isLoading = false;
+        }
+    }
+
+    async loadDataWithRetry(maxRetries = 3) {
+        let retries = 0;
+        
+        while (retries < maxRetries) {
+            try {
+                await this.loadData();
+                return; // Succès, sortir de la boucle
+            } catch (error) {
+                retries++;
+                console.warn(`Tentative ${retries}/${maxRetries} échouée:`, error.message);
+                
+                if (retries < maxRetries) {
+                    // Attendre avant de réessayer (backoff exponentiel)
+                    const delay = Math.pow(2, retries) * 1000; // 2s, 4s, 8s...
+                    console.log(`Attente de ${delay}ms avant la prochaine tentative...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                } else {
+                    console.error('Toutes les tentatives ont échoué');
+                    this.notificationManager.error('Impossible de charger les données après plusieurs tentatives');
+                }
+            }
         }
     }
 
@@ -205,6 +271,26 @@ class AdminPage {
         this.activeLancements.textContent = this.stats.activeLancements || 0;
         this.pausedLancements.textContent = this.stats.pausedLancements || 0;
         this.completedLancements.textContent = this.stats.completedLancements || 0;
+    }
+
+    showNoDataMessage() {
+        if (!this.operationsTableBody) return;
+        
+        this.operationsTableBody.innerHTML = `
+            <tr>
+                <td colspan="8" style="text-align: center; padding: 2rem; color: #dc3545;">
+                    <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                    <br>
+                    <strong>Erreur de chargement des données</strong>
+                    <br>
+                    <small>Vérifiez la connexion au serveur et réessayez</small>
+                    <br>
+                    <button onclick="window.adminPage.loadData()" class="btn btn-sm btn-outline-primary mt-2">
+                        <i class="fas fa-refresh"></i> Réessayer
+                    </button>
+                </td>
+            </tr>
+        `;
     }
 
     showRateLimitWarning() {
@@ -464,14 +550,11 @@ class AdminPage {
             // Validation des heures incohérentes
             let timeWarning = '';
             if (formattedStartTime && formattedEndTime && formattedStartTime !== '-' && formattedEndTime !== '-') {
-                const [startHours, startMinutes] = formattedStartTime.split(':').map(Number);
-                const [endHours, endMinutes] = formattedEndTime.split(':').map(Number);
-                
-                const startTotalMinutes = startHours * 60 + startMinutes;
-                const endTotalMinutes = endHours * 60 + endMinutes;
+                const startMinutes = this.timeToMinutes(formattedStartTime);
+                const endMinutes = this.timeToMinutes(formattedEndTime);
                 
                 // Si l'heure de fin est avant l'heure de début (et pas de traversée de minuit)
-                if (endTotalMinutes < startTotalMinutes && endTotalMinutes > 0) {
+                if (endMinutes < startMinutes && endMinutes > 0) {
                     timeWarning = ' ⚠️';
                     console.warn(`⚠️ Heures incohérentes pour ${operation.lancementCode}: ${formattedStartTime} -> ${formattedEndTime}`);
                 }
@@ -484,6 +567,9 @@ class AdminPage {
             });
             
             const row = document.createElement('tr');
+            
+            // Ajouter l'ID de l'opération pour pouvoir la retrouver
+            row.setAttribute('data-operation-id', operation.id);
             
             // Ajouter une classe spéciale pour les lignes de pause
             if (operation.type === 'pause') {
@@ -519,22 +605,40 @@ class AdminPage {
         // Si c'est null ou undefined, retourner un tiret
         if (!dateString) return '-';
         
-        // Si c'est déjà au format HH:mm ou HH:mm:ss, extraire juste HH:mm
+        console.log(`🔧 formatDateTime input: "${dateString}" (type: ${typeof dateString})`);
+        
+        // Si c'est déjà au format HH:mm, le retourner directement
         if (typeof dateString === 'string') {
-            const timeMatch = dateString.match(/^(\d{2}:\d{2})(:\d{2})?$/);
+            const timeMatch = dateString.match(/^(\d{1,2}):(\d{2})$/);
             if (timeMatch) {
-                return timeMatch[1]; // Retourner juste HH:mm
+                const hours = timeMatch[1].padStart(2, '0');
+                const minutes = timeMatch[2];
+                const result = `${hours}:${minutes}`;
+                console.log(`✅ formatDateTime: ${dateString} → ${result}`);
+                return result;
+            }
+            
+            // Si c'est au format HH:mm:ss, extraire HH:mm
+            const timeWithSecondsMatch = dateString.match(/^(\d{1,2}):(\d{2}):(\d{2})$/);
+            if (timeWithSecondsMatch) {
+                const hours = timeWithSecondsMatch[1].padStart(2, '0');
+                const minutes = timeWithSecondsMatch[2];
+                const result = `${hours}:${minutes}`;
+                console.log(`✅ formatDateTime: ${dateString} → ${result}`);
+                return result;
             }
         }
         
         // Si c'est un objet Date, extraire l'heure avec fuseau horaire français
         if (dateString instanceof Date) {
-            return dateString.toLocaleTimeString('fr-FR', {
+            const result = dateString.toLocaleTimeString('fr-FR', {
                 timeZone: 'Europe/Paris',
                 hour: '2-digit',
                 minute: '2-digit',
                 hour12: false
             });
+            console.log(`✅ formatDateTime: Date → ${result}`);
+            return result;
         }
         
         // Sinon, essayer de formater comme une date complète avec fuseau horaire Paris
@@ -542,18 +646,21 @@ class AdminPage {
             const date = new Date(dateString);
             if (!isNaN(date.getTime())) {
                 // Utiliser fuseau horaire français (Europe/Paris)
-                return date.toLocaleTimeString('fr-FR', {
+                const result = date.toLocaleTimeString('fr-FR', {
                     timeZone: 'Europe/Paris',
                     hour: '2-digit',
                     minute: '2-digit',
                     hour12: false
                 });
+                console.log(`✅ formatDateTime: Date string → ${result}`);
+                return result;
             }
         } catch (error) {
             console.warn('Erreur formatage heure:', dateString, error);
         }
         
         // En dernier recours, retourner la valeur originale ou un tiret
+        console.warn(`⚠️ Format non reconnu: ${dateString}`);
         return dateString || '-';
     }
 
@@ -1034,13 +1141,32 @@ class AdminPage {
             
             const updateData = {};
             
-            // Ajouter seulement les champs qui ont changé
+            // Ajouter seulement les champs qui ont changé avec validation
             if (startTimeChanged) {
-                updateData.startTime = startTimeInput.value;
+                const startTime = this.validateAndFormatTime(startTimeInput.value);
+                if (startTime) {
+                    updateData.startTime = startTime;
+                } else {
+                    this.notificationManager.error('Format d\'heure de début invalide');
+                    return;
+                }
             }
             
             if (endTimeChanged) {
-                updateData.endTime = endTimeInput.value || null;
+                const endTime = this.validateAndFormatTime(endTimeInput.value);
+                if (endTime) {
+                    updateData.endTime = endTime;
+                } else {
+                    this.notificationManager.error('Format d\'heure de fin invalide');
+                    return;
+                }
+            }
+            
+            // Validation de cohérence des heures
+            if (updateData.startTime && updateData.endTime) {
+                if (!this.validateTimeConsistency(updateData.startTime, updateData.endTime)) {
+                    this.notificationManager.warning('Attention: L\'heure de fin est antérieure à l\'heure de début');
+                }
             }
 
             console.log(`💾 Sauvegarde opération ${id}:`, updateData);
@@ -1049,14 +1175,173 @@ class AdminPage {
             
             if (response.success) {
                 this.notificationManager.success('Opération mise à jour avec succès');
-                this.loadData(); // Recharger les données
+                this.updateOperationInMemory(id, updateData);
+                this.updateSingleRowInTable(id);
             } else {
-                this.notificationManager.error('Erreur lors de la mise à jour');
+                const errorMessage = response.error || 'Erreur lors de la mise à jour';
+                this.notificationManager.error(`Erreur: ${errorMessage}`);
+                console.error('Erreur de mise à jour:', response);
             }
         } catch (error) {
             console.error('Erreur sauvegarde:', error);
-            this.notificationManager.error('Erreur lors de la sauvegarde');
+            
+            let errorMessage = 'Erreur lors de la sauvegarde';
+            if (error.message.includes('fetch')) {
+                errorMessage = 'Impossible de contacter le serveur';
+            } else if (error.message.includes('HTTP')) {
+                errorMessage = `Erreur serveur: ${error.message}`;
+            }
+            
+            this.notificationManager.error(errorMessage);
+            
+            // Restaurer les valeurs originales en cas d'erreur
+            this.loadData();
         }
+    }
+
+    updateOperationInMemory(operationId, updateData) {
+        console.log(`🔄 Mise à jour en mémoire de l'opération ${operationId}:`, updateData);
+        
+        const operation = this.operations.find(op => op.id == operationId);
+        if (!operation) {
+            console.error(`❌ Opération ${operationId} non trouvée en mémoire`);
+            return;
+        }
+        
+        // Mettre à jour les champs modifiés
+        if (updateData.startTime !== undefined) {
+            operation.startTime = updateData.startTime;
+            console.log(`✅ startTime mis à jour: ${operation.startTime}`);
+        }
+        
+        if (updateData.endTime !== undefined) {
+            operation.endTime = updateData.endTime;
+            console.log(`✅ endTime mis à jour: ${operation.endTime}`);
+        }
+        
+        // Mettre à jour le timestamp de dernière modification
+        operation.lastUpdate = new Date().toISOString();
+        
+        console.log(`✅ Opération ${operationId} mise à jour en mémoire`);
+    }
+
+    updateSingleRowInTable(operationId) {
+        console.log(`🔄 Mise à jour de la ligne ${operationId} dans le tableau`);
+        
+        const operation = this.operations.find(op => op.id == operationId);
+        if (!operation) {
+            console.error(`❌ Opération ${operationId} non trouvée pour mise à jour du tableau`);
+            return;
+        }
+        
+        // Trouver la ligne existante
+        const existingRow = document.querySelector(`tr[data-operation-id="${operationId}"]`);
+        if (!existingRow) {
+            console.warn(`⚠️ Ligne non trouvée pour l'opération ${operationId}, rechargement complet`);
+            this.updateOperationsTable();
+            return;
+        }
+        
+        // Mettre à jour les cellules d'heures
+        const cells = existingRow.querySelectorAll('td');
+        if (cells.length >= 5) {
+            // Cellule heure début (index 3)
+            const formattedStartTime = this.formatDateTime(operation.startTime);
+            cells[3].innerHTML = formattedStartTime;
+            
+            // Cellule heure fin (index 4)
+            const formattedEndTime = this.formatDateTime(operation.endTime);
+            cells[4].innerHTML = formattedEndTime;
+            
+            console.log(`✅ Ligne ${operationId} mise à jour: ${formattedStartTime} -> ${formattedEndTime}`);
+        } else {
+            console.error(`❌ Pas assez de cellules dans la ligne ${operationId}: ${cells.length}`);
+        }
+    }
+
+    debugTimeSync(operationId) {
+        const operation = this.operations.find(op => op.id == operationId);
+        const row = document.querySelector(`tr[data-operation-id="${operationId}"]`);
+        
+        if (!operation) {
+            console.error(`❌ Opération ${operationId} non trouvée en mémoire`);
+            return;
+        }
+        
+        if (!row) {
+            console.error(`❌ Ligne ${operationId} non trouvée dans le DOM`);
+            return;
+        }
+        
+        const cells = row.querySelectorAll('td');
+        const displayedStartTime = cells[3] ? cells[3].textContent : 'N/A';
+        const displayedEndTime = cells[4] ? cells[4].textContent : 'N/A';
+        
+        console.log(`🔍 Debug synchronisation ${operationId}:`, {
+            memory: {
+                startTime: operation.startTime,
+                endTime: operation.endTime
+            },
+            displayed: {
+                startTime: displayedStartTime,
+                endTime: displayedEndTime
+            },
+            formatted: {
+                startTime: this.formatDateTime(operation.startTime),
+                endTime: this.formatDateTime(operation.endTime)
+            }
+        });
+    }
+
+    validateAndFormatTime(timeString) {
+        if (!timeString) return null;
+        
+        // Nettoyer la chaîne
+        const cleanTime = timeString.trim();
+        
+        // Vérifier le format HH:mm
+        const timeMatch = cleanTime.match(/^(\d{1,2}):(\d{2})$/);
+        if (timeMatch) {
+            const hours = parseInt(timeMatch[1]);
+            const minutes = parseInt(timeMatch[2]);
+            
+            // Validation des valeurs
+            if (hours < 0 || hours > 23) {
+                console.error(`Heures invalides: ${hours}`);
+                return null;
+            }
+            if (minutes < 0 || minutes > 59) {
+                console.error(`Minutes invalides: ${minutes}`);
+                return null;
+            }
+            
+            // Retourner au format HH:mm
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        }
+        
+        console.error(`Format d'heure invalide: ${timeString}`);
+        return null;
+    }
+
+    validateTimeConsistency(startTime, endTime) {
+        if (!startTime || !endTime) return true; // Pas de validation si une heure manque
+        
+        const startMinutes = this.timeToMinutes(startTime);
+        const endMinutes = this.timeToMinutes(endTime);
+        
+        return endMinutes >= startMinutes;
+    }
+
+    timeToMinutes(timeString) {
+        if (!timeString) return 0;
+        
+        const parts = timeString.split(':');
+        if (parts.length < 2) return 0;
+        
+        const hours = parseInt(parts[0]) || 0;
+        const minutes = parseInt(parts[1]) || 0;
+        
+        return hours * 60 + minutes;
     }
 
     async deleteOperation(id) {

@@ -53,14 +53,14 @@ app.use(morgan('combined'));
 // Rate limiting spécifique pour les routes admin (plus permissif)
 const adminLimiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1 minute
-    max: process.env.NODE_ENV === 'production' ? 30 : 100, // 30 en prod, 100 en dev
+    max: process.env.NODE_ENV === 'production' ? 200 : 500, // 200 en prod, 500 en dev
     message: {
         error: 'Trop de requêtes admin, veuillez patienter',
         retryAfter: 60
     },
     skip: (req) => {
-        // Skip pour les requêtes de santé
-        return req.path === '/api/health';
+        // Skip pour les requêtes de santé et les requêtes de lecture
+        return req.path === '/api/health' || req.method === 'GET';
     }
 });
 
