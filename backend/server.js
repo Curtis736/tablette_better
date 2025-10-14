@@ -11,6 +11,7 @@ const lancementRoutes = require('./routes/lancements');
 const operationRoutes = require('./routes/operations');
 const adminRoutes = require('./routes/admin');
 const authRoutes = require('./routes/auth');
+const commentRoutes = require('./routes/comments');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -69,6 +70,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/operators', operatorRoutes);
 app.use('/api/lancements', lancementRoutes);
 app.use('/api/operations', operationRoutes);
+app.use('/api/comments', commentRoutes);
 app.use('/api/admin', adminLimiter, adminRoutes);
 
 // Route de santé
@@ -90,6 +92,7 @@ app.get('/', (req, res) => {
             operators: '/api/operators',
             lancements: '/api/lancements',
             operations: '/api/operations',
+            comments: '/api/comments',
             admin: '/api/admin'
         }
     });

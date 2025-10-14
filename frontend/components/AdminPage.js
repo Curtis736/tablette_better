@@ -1,4 +1,4 @@
-// Page d'administration
+// Page d'administration - v20251014-fixed-v4
 import TimeUtils from '../utils/TimeUtils.js';
 
 class AdminPage {
@@ -153,31 +153,13 @@ class AdminPage {
             this.isLoading = true;
             
             // Charger les opérateurs connectés et les données admin en parallèle
-            const [adminResponse, operatorsResponse] = await Promise.all([
-                fetch('http://localhost:3000/api/admin'),
-                fetch('http://localhost:3000/api/admin/operators')
+            const [adminData, operatorsData] = await Promise.all([
+                this.apiService.getAdminData(),
+                this.apiService.getConnectedOperators()
             ]);
             
-            // Vérifier les erreurs de rate limiting
-            if (adminResponse.status === 429) {
-                this.showRateLimitWarning();
-                return;
-            }
-            if (operatorsResponse.status === 429) {
-                this.showRateLimitWarning();
-                return;
-            }
-            
-            // Vérifier les erreurs HTTP générales
-            if (!adminResponse.ok) {
-                throw new Error(`Erreur HTTP ${adminResponse.status}: ${adminResponse.statusText}`);
-            }
-            if (!operatorsResponse.ok) {
-                throw new Error(`Erreur HTTP ${operatorsResponse.status}: ${operatorsResponse.statusText}`);
-            }
-            
-            const data = await adminResponse.json();
-            const operatorsData = await operatorsResponse.json();
+            // Les données sont déjà parsées par ApiService
+            const data = adminData;
             
             console.log('DONNEES BRUTES:', data);
             console.log('OPERATEURS CONNECTES:', operatorsData);
@@ -1087,6 +1069,9 @@ class AdminPage {
                     current: currentValue,
                     changed: currentValue !== originalValue
                 });
+                
+                // Validation en temps réel des heures
+                this.validateTimeInputs(row, id);
             });
             
             // Détecter les modifications par le navigateur
@@ -1105,15 +1090,125 @@ class AdminPage {
         this.loadData();
     }
 
+    validateTimeInputs(row, operationId) {
+        const startTimeInput = row.querySelector('input[data-field="startTime"]');
+        const endTimeInput = row.querySelector('input[data-field="endTime"]');
+        
+        if (!startTimeInput || !endTimeInput) return;
+
+        const startTime = startTimeInput.value;
+        const endTime = endTimeInput.value;
+
+        if (startTime && endTime) {
+            const startTimeObj = new Date(`2000-01-01 ${startTime}`);
+            const endTimeObj = new Date(`2000-01-01 ${endTime}`);
+            
+            if (endTimeObj <= startTimeObj) {
+                // Marquer les inputs comme invalides
+                startTimeInput.style.borderColor = '#dc3545';
+                startTimeInput.style.backgroundColor = '#f8d7da';
+                endTimeInput.style.borderColor = '#dc3545';
+                endTimeInput.style.backgroundColor = '#f8d7da';
+                
+                // Ajouter un message d'erreur
+                this.showTimeValidationError(row, 'L\'heure de fin doit être postérieure à l\'heure de début');
+            } else {
+                // Restaurer l'apparence normale
+                startTimeInput.style.borderColor = '';
+                startTimeInput.style.backgroundColor = '';
+                endTimeInput.style.borderColor = '';
+                endTimeInput.style.backgroundColor = '';
+                
+                // Supprimer le message d'erreur
+                this.hideTimeValidationError(row);
+            }
+        }
+    }
+
+    showTimeValidationError(row, message) {
+        // Supprimer l'ancien message s'il existe
+        this.hideTimeValidationError(row);
+        
+        // Créer le message d'erreur
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'time-validation-error';
+        errorDiv.style.cssText = `
+            color: #dc3545;
+            font-size: 12px;
+            margin-top: 5px;
+            padding: 5px;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 4px;
+        `;
+        errorDiv.textContent = message;
+        
+        // Insérer après la ligne
+        row.parentNode.insertBefore(errorDiv, row.nextSibling);
+    }
+
+    hideTimeValidationError(row) {
+        const errorDiv = row.parentNode.querySelector('.time-validation-error');
+        if (errorDiv) {
+            errorDiv.remove();
+        }
+    }
+
     async saveOperation(id) {
         try {
-            const startTimeInput = document.querySelector(`input[data-id="${id}"][data-field="startTime"]`);
-            const endTimeInput = document.querySelector(`input[data-id="${id}"][data-field="endTime"]`);
+            // Rechercher dans la ligne ciblée pour éviter les sélections globales nulles
+            const row = document.querySelector(`tr[data-operation-id="${id}"]`);
             
+            if (!row) {
+                console.warn('⚠️ Ligne non trouvée pour l\'opération', id);
+                this.notificationManager.warning('Ligne non trouvée');
+                this.updateOperationsTable();
+                return;
+            }
+
+            // Rechercher les inputs avec plusieurs sélecteurs possibles
+            const startTimeInput = row.querySelector('input[data-field="startTime"]') || 
+                                 row.querySelector('input[data-id="' + id + '"][data-field="startTime"]') ||
+                                 row.querySelector('.time-input[data-field="startTime"]');
+            const endTimeInput = row.querySelector('input[data-field="endTime"]') || 
+                               row.querySelector('input[data-id="' + id + '"][data-field="endTime"]') ||
+                               row.querySelector('.time-input[data-field="endTime"]');
+
+            console.log('🔍 Recherche des inputs:', {
+                id,
+                rowFound: !!row,
+                startTimeInputFound: !!startTimeInput,
+                endTimeInputFound: !!endTimeInput,
+                rowHTML: row.innerHTML.substring(0, 200) + '...'
+            });
+
+            if (!startTimeInput || !endTimeInput) {
+                console.warn('⚠️ Impossible de trouver les champs d\'heure pour la ligne', id);
+                console.log('🔍 Contenu de la ligne:', row.innerHTML);
+                this.notificationManager.warning('Aucune édition active pour cette ligne - Rechargement du tableau');
+                this.updateOperationsTable();
+                return;
+            }
+
             // Récupérer les valeurs originales
             const originalStartTime = startTimeInput.getAttribute('data-original');
             const originalEndTime = endTimeInput.getAttribute('data-original');
             
+            // Validation des heures
+            const startTime = startTimeInput.value;
+            const endTime = endTimeInput.value;
+            
+            if (startTime && endTime) {
+                const startTimeObj = new Date(`2000-01-01 ${startTime}`);
+                const endTimeObj = new Date(`2000-01-01 ${endTime}`);
+                
+                if (endTimeObj <= startTimeObj) {
+                    this.notificationManager.error('❌ L\'heure de fin doit être postérieure à l\'heure de début');
+                    console.warn('⚠️ Heure de fin antérieure à l\'heure de début:', { startTime, endTime });
+                    return;
+                }
+            }
+
             // Vérifier si les valeurs ont vraiment changé
             const startTimeChanged = startTimeInput.value !== originalStartTime;
             const endTimeChanged = endTimeInput.value !== originalEndTime;

@@ -126,6 +126,33 @@
                     </div>
                 </div>
 
+                <!-- Section Commentaires -->
+                <div class="section">
+                    <h2><i class="fas fa-comments"></i> Commentaires</h2>
+                    <div class="comment-form">
+                        <div class="input-group">
+                            <i class="fas fa-edit"></i>
+                            <textarea id="commentInput" placeholder="Ajouter un commentaire sur cette opération..." rows="3" maxlength="2000"></textarea>
+                        </div>
+                        <div class="comment-actions">
+                            <button id="addCommentBtn" class="btn-primary" disabled>
+                                <i class="fas fa-paper-plane"></i>
+                                Envoyer Commentaire
+                            </button>
+                            <span class="comment-counter">
+                                <span id="commentCharCount">0</span>/2000 caractères
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="comments-list" id="commentsList">
+                        <div class="no-comments">
+                            <i class="fas fa-comment-slash"></i>
+                            <p>Aucun commentaire pour le moment</p>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Historique des lancements -->
                 <div class="section">
                     <h2><i class="fas fa-history"></i> Mon Historique</h2>

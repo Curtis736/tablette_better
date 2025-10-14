@@ -610,3 +610,4 @@ docker-compose up -d
 ---
 
 **Développé pour SEDI ERP - Interface Tablette Production** 🏭📱
+

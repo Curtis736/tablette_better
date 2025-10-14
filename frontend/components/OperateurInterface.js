@@ -55,6 +55,12 @@ class OperateurInterface {
         this.operatorHistoryTable = document.getElementById('operatorHistoryTable');
         this.operatorHistoryTableBody = document.getElementById('operatorHistoryTableBody');
         
+        // Éléments pour les commentaires
+        this.commentInput = document.getElementById('commentInput');
+        this.addCommentBtn = document.getElementById('addCommentBtn');
+        this.commentCharCount = document.getElementById('commentCharCount');
+        this.commentsList = document.getElementById('commentsList');
+        
         // Debug des éléments historique
         console.log('refreshHistoryBtn trouvé:', !!this.refreshHistoryBtn);
         console.log('operatorHistoryTableBody trouvé:', !!this.operatorHistoryTableBody);
@@ -126,6 +132,10 @@ class OperateurInterface {
         
         // Bouton actualiser historique
         this.refreshHistoryBtn.addEventListener('click', () => this.loadOperatorHistory());
+        
+        // Gestion des commentaires
+        this.commentInput.addEventListener('input', () => this.handleCommentInput());
+        this.addCommentBtn.addEventListener('click', () => this.handleAddComment());
     }
 
     handleLancementInput() {
@@ -187,6 +197,9 @@ class OperateurInterface {
                 <small>✅ Lancement validé dans LCTE - Prêt à démarrer</small>
             `;
             this.notificationManager.success('Lancement trouvé et validé dans la base de données');
+            
+            // Recharger les commentaires pour ce lancement
+            await this.loadComments();
             
             // Activer le bouton démarrer seulement si validation réussie
             if (!this.isRunning) {
@@ -573,6 +586,249 @@ class OperateurInterface {
         
         console.log('✅ Historique affiché avec succès:', operations.length, 'opérations');
         console.log('=== FIN displayOperatorHistory ===');
+    }
+
+    // Gestion des commentaires
+    handleCommentInput() {
+        const comment = this.commentInput.value.trim();
+        const charCount = comment.length;
+        
+        // Mettre à jour le compteur de caractères
+        this.commentCharCount.textContent = charCount;
+        
+        // Changer la couleur selon le nombre de caractères
+        this.commentCharCount.className = 'comment-counter';
+        if (charCount > 1800) {
+            this.commentCharCount.classList.add('danger');
+        } else if (charCount > 1500) {
+            this.commentCharCount.classList.add('warning');
+        }
+        
+        // Activer/désactiver le bouton d'envoi
+        this.addCommentBtn.disabled = charCount === 0 || charCount > 2000;
+        
+        // Mettre à jour le placeholder si nécessaire
+        if (this.currentLancement) {
+            this.commentInput.placeholder = `Ajouter un commentaire sur ${this.currentLancement.CodeLancement}...`;
+        } else {
+            this.commentInput.placeholder = 'Ajouter un commentaire sur cette opération...';
+        }
+    }
+
+    async handleAddComment() {
+        const comment = this.commentInput.value.trim();
+        
+        if (!comment) {
+            this.notificationManager.error('Veuillez saisir un commentaire');
+            return;
+        }
+        
+        if (comment.length > 2000) {
+            this.notificationManager.error('Le commentaire ne peut pas dépasser 2000 caractères');
+            return;
+        }
+        
+        if (!this.currentLancement) {
+            this.notificationManager.error('Aucun lancement sélectionné pour ajouter un commentaire');
+            return;
+        }
+        
+        try {
+            // Désactiver le bouton pendant l'envoi
+            this.addCommentBtn.disabled = true;
+            this.addCommentBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Envoi...';
+            
+            const result = await this.apiService.addComment(
+                this.operator.code || this.operator.id,
+                this.operator.nom || this.operator.name,
+                this.currentLancement.CodeLancement,
+                comment
+            );
+            
+            if (result.success) {
+                this.notificationManager.success('Commentaire envoyé avec succès');
+                
+                // Afficher une notification spéciale pour l'admin
+                this.showAdminNotification(comment, this.currentLancement.CodeLancement);
+                
+                // Vider le champ de commentaire
+                this.commentInput.value = '';
+                this.handleCommentInput();
+                
+                // Recharger les commentaires
+                await this.loadComments();
+                
+                // Afficher un message si l'email n'a pas pu être envoyé
+                if (!result.emailSent) {
+                    this.notificationManager.warning('Commentaire enregistré - Vérifiez la console du serveur');
+                }
+            } else {
+                this.notificationManager.error(result.error || 'Erreur lors de l\'envoi du commentaire');
+            }
+            
+        } catch (error) {
+            console.error('Erreur lors de l\'envoi du commentaire:', error);
+            this.notificationManager.error('Erreur de connexion lors de l\'envoi du commentaire');
+        } finally {
+            // Réactiver le bouton
+            this.addCommentBtn.disabled = false;
+            this.addCommentBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Envoyer Commentaire';
+        }
+    }
+
+    async loadComments() {
+        try {
+            if (!this.currentLancement) {
+                this.displayComments([]);
+                return;
+            }
+            
+            const result = await this.apiService.getCommentsByLancement(this.currentLancement.CodeLancement);
+            
+            if (result.success) {
+                this.displayComments(result.data);
+            } else {
+                console.error('Erreur lors du chargement des commentaires:', result.error);
+                this.displayComments([]);
+            }
+            
+        } catch (error) {
+            console.error('Erreur lors du chargement des commentaires:', error);
+            this.displayComments([]);
+        }
+    }
+
+    displayComments(comments) {
+        if (!this.commentsList) {
+            console.warn('⚠️ commentsList non trouvé');
+            return;
+        }
+        
+        if (!comments || comments.length === 0) {
+            this.commentsList.innerHTML = `
+                <div class="no-comments">
+                    <i class="fas fa-comment-slash"></i>
+                    <p>Aucun commentaire pour le moment</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Trier les commentaires par date (plus récents en premier)
+        const sortedComments = comments.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        this.commentsList.innerHTML = sortedComments.map(comment => `
+            <div class="comment-item">
+                <div class="comment-header">
+                    <div>
+                        <span class="comment-author">${comment.operatorName || comment.operatorCode}</span>
+                        <span class="comment-lancement">${comment.lancementCode}</span>
+                    </div>
+                    <div class="comment-timestamp">${this.formatCommentTimestamp(comment.timestamp)}</div>
+                </div>
+                <div class="comment-content">${this.escapeHtml(comment.comment)}</div>
+                ${this.canDeleteComment(comment) ? `
+                    <div class="comment-actions-item">
+                        <button class="btn-comment btn-delete-comment" data-comment-id="${comment.id}">
+                            <i class="fas fa-trash"></i> Supprimer
+                        </button>
+                    </div>
+                ` : ''}
+            </div>
+        `).join('');
+        
+        // Ajouter les event listeners pour les boutons de suppression
+        this.commentsList.querySelectorAll('.btn-delete-comment').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const commentId = parseInt(e.target.closest('.btn-delete-comment').dataset.commentId);
+                this.deleteComment(commentId);
+            });
+        });
+    }
+
+    formatCommentTimestamp(timestamp) {
+        try {
+            const date = new Date(timestamp);
+            return date.toLocaleString('fr-FR', {
+                timeZone: 'Europe/Paris',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } catch (error) {
+            return timestamp;
+        }
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    canDeleteComment(comment) {
+        // L'opérateur peut supprimer ses propres commentaires
+        return comment.operatorCode === (this.operator.code || this.operator.id);
+    }
+
+    async deleteComment(commentId) {
+        if (!confirm('Êtes-vous sûr de vouloir supprimer ce commentaire ?')) {
+            return;
+        }
+        
+        try {
+            const result = await this.apiService.deleteComment(commentId, this.operator.code || this.operator.id);
+            
+            if (result.success) {
+                this.notificationManager.success('Commentaire supprimé avec succès');
+                await this.loadComments();
+            } else {
+                this.notificationManager.error(result.error || 'Erreur lors de la suppression du commentaire');
+            }
+            
+        } catch (error) {
+            console.error('Erreur lors de la suppression du commentaire:', error);
+            this.notificationManager.error('Erreur de connexion lors de la suppression du commentaire');
+        }
+    }
+
+    // Méthode pour recharger les commentaires quand un nouveau lancement est sélectionné
+    async onLancementChanged() {
+        await this.loadComments();
+    }
+
+    // Afficher une notification spéciale pour l'admin
+    showAdminNotification(comment, lancementCode) {
+        // Créer une notification persistante et visible
+        const notification = document.createElement('div');
+        notification.className = 'admin-notification';
+        notification.innerHTML = `
+            <div class="admin-notification-content">
+                <div class="admin-notification-header">
+                    <i class="fas fa-bell"></i>
+                    <strong>NOUVEAU COMMENTAIRE SEDI</strong>
+                    <button class="admin-notification-close" onclick="this.parentElement.parentElement.remove()">×</button>
+                </div>
+                <div class="admin-notification-body">
+                    <p><strong>Lancement:</strong> ${lancementCode}</p>
+                    <p><strong>Opérateur:</strong> ${this.operator.nom || this.operator.name}</p>
+                    <p><strong>Commentaire:</strong> ${comment.substring(0, 100)}${comment.length > 100 ? '...' : ''}</p>
+                    <p><strong>Heure:</strong> ${new Date().toLocaleString('fr-FR')}</p>
+                </div>
+            </div>
+        `;
+        
+        // Ajouter au body de la page
+        document.body.appendChild(notification);
+        
+        // Auto-supprimer après 30 secondes
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.remove();
+            }
+        }, 30000);
     }
 }
 

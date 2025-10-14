@@ -57,3 +57,4 @@ echo "📊 Backend: http://localhost:3000"
 echo "🌐 Frontend: http://localhost:8080"
 echo "📝 Logs: ~/Sedi_ati/tablette_better/logs/"
 
+
