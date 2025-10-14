@@ -31,6 +31,6 @@ module.exports = {
   maxConcurrency: 5,
   // Configuration pour les tests de sécurité
   testEnvironmentOptions: {
-    url: 'http://localhost:3000'
+    url: 'http://localhost:3001'
   }
 };
