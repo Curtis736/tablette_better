@@ -10,11 +10,11 @@ class ApiService {
             // Environnement de production - utiliser le proxy Nginx
             this.baseUrl = `${window.location.protocol}//${window.location.host}/api`;
         } else if (currentPort === '8080') {
-            // Environnement de développement - frontend sur 8080, backend sur 3000
-            this.baseUrl = 'http://localhost:3000/api';
+            // Environnement de développement - frontend sur 8080, backend sur 3001
+            this.baseUrl = 'http://localhost:3001/api';
         } else {
-            // Autre cas - utiliser localhost:3000 par défaut
-            this.baseUrl = 'http://localhost:3000/api';
+            // Autre cas - utiliser localhost:3001 par défaut
+            this.baseUrl = 'http://localhost:3001/api';
         }
         
         this.defaultHeaders = {

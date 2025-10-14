@@ -202,3 +202,4 @@ if [[ "$FULL_MODE" == true ]]; then
 fi
 echo "  • Tests Docker: Réussis"
 echo ""
+

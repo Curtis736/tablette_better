@@ -34,22 +34,28 @@ DateCreation     -- Date de création
 
 ## 🚀 **DÉMARRAGE RAPIDE**
 
-### **Option 1 : Script automatique (RECOMMANDÉ)**
-```bash
-# Double-cliquez sur le fichier
-start.bat
-```
-
-### **Option 2 : Commandes manuelles**
+### **Développement Local**
 ```bash
 # Terminal 1 - Backend
 cd backend
-npm start
+npm install && npm start
 
 # Terminal 2 - Frontend  
 cd frontend
-npm start
+npm install && npx http-server . -p 8080 --cors
 ```
+
+### **Production avec Docker**
+```bash
+# Démarrer en production
+docker-compose -f docker/docker-compose.yml up -d
+
+# Démarrer en développement
+docker-compose -f docker/docker-compose.dev.yml up -d
+```
+
+### **Déploiement sur Serveur**
+Voir le [Guide de Déploiement Git](docs/GIT_DEPLOYMENT.md) pour une approche simple et professionnelle.
 
 ### **Option 3 : Depuis la racine**
 ```bash
@@ -182,6 +188,7 @@ cd backend && npm start
 ---
 
 **Développé pour SEDI ERP - Interface Tablette Production**
+
 
 
 

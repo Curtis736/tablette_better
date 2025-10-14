@@ -118,7 +118,7 @@ class App {
     }
 
     getApiBaseUrl() {
-        return 'http://localhost:3000/api';
+        return 'http://localhost:3001/api';
     }
 
     showNotification(message, type = 'info') {

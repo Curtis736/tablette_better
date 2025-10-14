@@ -197,3 +197,4 @@ describe('Performance Tests', () => {
     }, PERFORMANCE_TIMEOUT);
   });
 });
+
