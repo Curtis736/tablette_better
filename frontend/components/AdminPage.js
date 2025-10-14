@@ -380,7 +380,7 @@ class AdminPage {
             // Charger les lancements de l'opérateur spécifique
             try {
                 this.isLoading = true;
-                const response = await fetch(`http://localhost:3000/api/admin/operators/${selectedOperator}/operations`);
+                const response = await fetch(`http://localhost:3001/api/admin/operators/${selectedOperator}/operations`);
                 const data = await response.json();
                 
                 if (data.success) {
@@ -423,7 +423,7 @@ class AdminPage {
             console.log('Ajout d\'une nouvelle opération:', newOperation);
             
             // Appeler l'API pour ajouter l'opération
-            const response = await fetch('http://localhost:3000/api/admin/operations', {
+            const response = await fetch('http://localhost:3001/api/admin/operations', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -460,7 +460,7 @@ class AdminPage {
             console.log('Début du transfert vers SEDI_APP_INDEPENDANTE...');
             
             // Appeler l'API de transfert
-            const response = await fetch('http://localhost:3000/api/admin/transfer', {
+            const response = await fetch('http://localhost:3001/api/admin/transfer', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -1643,7 +1643,7 @@ class AdminPage {
             this.isLoading = true;
             this.currentPage = page;
             
-            const response = await fetch(`http://localhost:3000/api/admin/operations?page=${page}&limit=25`);
+            const response = await fetch(`http://localhost:3001/api/admin/operations?page=${page}&limit=25`);
             const data = await response.json();
             
             if (data.operations) {

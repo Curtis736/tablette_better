@@ -93,7 +93,7 @@ class StorageService {
 
     getDefaultSettings() {
         return {
-            apiUrl: 'http://localhost:3000/api',
+            apiUrl: 'http://localhost:3001/api',
             timeout: 30000,
             retryAttempts: 3,
             cacheEnabled: true,
