@@ -61,9 +61,9 @@ server {
 ## 📱 **Accès à l'Application**
 
 ### **URLs de Production :**
-- **Interface Web** : http://sedi-tablette.local
-- **API Backend** : http://sedi-tablette.local:3001
-- **Health Check** : http://sedi-tablette.local:3001/api/health
+- **Interface Web** : http://sedi-tablette.local:8080
+- **API Backend** : http://sedi-tablette.local:3002
+- **Health Check** : http://sedi-tablette.local:3002/api/health
 
 ### **URLs de Développement :**
 - **Interface Web** : http://sedi-tablette-dev.local:8080
@@ -82,10 +82,10 @@ ping sedi-tablette.local
 ### **Test de l'application :**
 ```bash
 # Test de l'API
-curl http://sedi-tablette.local:3001/api/health
+curl http://sedi-tablette.local:3002/api/health
 
 # Test du frontend
-curl http://sedi-tablette.local
+curl http://sedi-tablette.local:8080
 ```
 
 ## 🛠️ **Scripts de Configuration Automatique**
@@ -112,5 +112,5 @@ echo "192.168.1.26 sedi-tablette.local" | sudo tee -a /etc/hosts
 
 1. **Redémarrage requis** : Après modification du fichier hosts, redémarrez le navigateur
 2. **Cache DNS** : Videz le cache DNS si nécessaire
-3. **Firewall** : Vérifiez que les ports 80 et 3001 sont ouverts
+3. **Firewall** : Vérifiez que les ports 8080 et 3002 sont ouverts
 4. **Certificats SSL** : Pour HTTPS, générez des certificats pour `sedi-tablette.local`
