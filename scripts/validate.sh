@@ -163,7 +163,7 @@ sleep 30
 
 # Tests de connectivité
 log "Tests de connectivité..."
-if curl -f http://localhost:3000/api/health; then
+if curl -f http://localhost:3001/api/health; then
     success "Backend accessible"
 else
     error "Backend non accessible"
