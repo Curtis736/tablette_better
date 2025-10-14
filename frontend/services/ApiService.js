@@ -1,4 +1,4 @@
-// Service pour gérer les appels API
+// Service pour gérer les appels API - v20251014-fixed-v2
 class ApiService {
     constructor() {
         // Détection automatique de l'environnement
@@ -10,11 +10,11 @@ class ApiService {
             // Environnement de production - utiliser le proxy Nginx
             this.baseUrl = `${window.location.protocol}//${window.location.host}/api`;
         } else if (currentPort === '8080') {
-            // Environnement de développement - frontend sur 8080, backend sur 3001
-            this.baseUrl = 'http://localhost:3001/api';
+            // Environnement de développement - frontend sur 8080, backend sur 3002
+            this.baseUrl = 'http://localhost:3002/api';
         } else {
-            // Autre cas - utiliser localhost:3001 par défaut
-            this.baseUrl = 'http://localhost:3001/api';
+            // Autre cas - utiliser localhost:3002 par défaut
+            this.baseUrl = 'http://localhost:3002/api';
         }
         
         this.defaultHeaders = {
@@ -283,6 +283,42 @@ class ApiService {
     // Export
     async exportOperations(date, format = 'csv') {
         return this.get(`/admin/export/${format}`, { date });
+    }
+    
+    // Commentaires
+    async addComment(operatorCode, operatorName, lancementCode, comment) {
+        return this.post('/comments', {
+            operatorCode,
+            operatorName,
+            lancementCode,
+            comment
+        });
+    }
+
+    async getCommentsByOperator(operatorCode, limit = 50) {
+        return this.get(`/comments/operator/${operatorCode}`, { limit });
+    }
+
+    async getCommentsByLancement(lancementCode, limit = 50) {
+        return this.get(`/comments/lancement/${lancementCode}`, { limit });
+    }
+
+    async getAllComments(limit = 100) {
+        return this.get('/comments', { limit });
+    }
+
+    async deleteComment(commentId, operatorCode) {
+        return this.delete(`/comments/${commentId}`, {
+            body: JSON.stringify({ operatorCode })
+        });
+    }
+
+    async testEmail() {
+        return this.post('/comments/test-email');
+    }
+
+    async getCommentStats(period = 'today') {
+        return this.get('/comments/stats', { period });
     }
     
     // Validation automatique d'un code de lancement
