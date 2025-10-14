@@ -1,4 +1,4 @@
-// Service pour gérer les appels API - v20251014-fixed-v2
+// Service pour gérer les appels API - v20251014-fixed-v3
 class ApiService {
     constructor() {
         // Détection automatique de l'environnement
@@ -11,10 +11,11 @@ class ApiService {
             this.baseUrl = `${window.location.protocol}//${window.location.host}/api`;
         } else if (currentPort === '8080') {
             // Environnement de développement - frontend sur 8080, backend sur 3002
-            this.baseUrl = 'http://localhost:3002/api';
+            // Utiliser l'IP du serveur au lieu de localhost
+            this.baseUrl = `http://${currentHost}:3002/api`;
         } else {
-            // Autre cas - utiliser localhost:3002 par défaut
-            this.baseUrl = 'http://localhost:3002/api';
+            // Autre cas - utiliser l'IP du serveur par défaut
+            this.baseUrl = `http://${currentHost}:3002/api`;
         }
         
         this.defaultHeaders = {
