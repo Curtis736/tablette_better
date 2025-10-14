@@ -24,7 +24,7 @@ echo   APPLICATION DEMARREE !
 echo ========================================
 echo.
 echo Frontend: http://localhost:8080
-echo Backend:  http://localhost:3000
+echo Backend:  http://localhost:3001
 echo.
 echo Connectez-vous avec le code: 929
 echo.

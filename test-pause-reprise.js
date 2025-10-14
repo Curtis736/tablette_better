@@ -8,7 +8,7 @@ async function testPauseRepriseLogic() {
         // Test avec un lancement spécifique (remplacez par un vrai code de lancement)
         const lancementCode = 'LT2501148'; // Exemple de votre interface
         
-        const response = await fetch(`http://localhost:3000/api/admin/debug/pause-reprise/${lancementCode}`);
+        const response = await fetch(`http://localhost:3001/api/admin/debug/pause-reprise/${lancementCode}`);
         const data = await response.json();
         
         if (data.success) {

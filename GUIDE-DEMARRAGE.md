@@ -26,7 +26,7 @@ npx http-server . -p 8080 --cors
 
 - **Interface Utilisateur** : http://localhost:8080
 - **Interface Admin** : http://localhost:8080 (Code: 929)
-- **API Backend** : http://localhost:3000
+- **API Backend** : http://localhost:3001
 
 ## 🔧 DÉPANNAGE
 
@@ -40,7 +40,7 @@ npx http-server . -p 8080 --cors
    curl http://localhost:8080
    
    # Tester le backend  
-   curl http://localhost:3000/api/health
+   curl http://localhost:3001/api/health
    ```
 
 2. **Redémarrer les serveurs**
@@ -52,7 +52,7 @@ npx http-server . -p 8080 --cors
    - Ou ouvrir les DevTools (F12) > Application > Clear Storage
 
 4. **Vérifier les ports**
-   - S'assurer qu'aucun autre service n'utilise les ports 3000 et 8080
+   - S'assurer qu'aucun autre service n'utilise les ports 3001 et 8080
 
 ### Problème : Erreurs dans la console
 

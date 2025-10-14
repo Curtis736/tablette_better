@@ -66,7 +66,7 @@ npm run start:frontend   # Démarre le frontend
 ## 🌐 **ACCÈS À L'APPLICATION**
 
 - **Frontend** : http://localhost:8080
-- **Backend API** : http://localhost:3000
+- **Backend API** : http://localhost:3001
 - **Code Admin** : **929**
 
 ## 📱 **UTILISATION**
@@ -86,7 +86,7 @@ npm run start:frontend   # Démarre le frontend
 ### **Variables d'environnement (backend/.env)**
 ```env
 NODE_ENV=development
-PORT=3000
+PORT=3001
 FRONTEND_URL=http://localhost:8080
 
 # Base de données
@@ -140,7 +140,7 @@ tablettev2/
 ### **Backend ne démarre pas**
 ```bash
 # Vérifier les ports occupés
-netstat -ano | findstr :3000
+netstat -ano | findstr :3001
 
 # Arrêter les processus
 taskkill /F /IM node.exe
@@ -155,9 +155,9 @@ cd backend && npm start
 - Vérifier l'utilisateur `QUALITE`
 
 ### **Frontend ne se connecte pas**
-- Vérifier que le backend est démarré (port 3000)
+- Vérifier que le backend est démarré (port 3001)
 - Contrôler les erreurs CORS dans la console
-- Tester l'API : http://localhost:3000/api/health
+- Tester l'API : http://localhost:3001/api/health
 
 ## 📊 **API ENDPOINTS**
 

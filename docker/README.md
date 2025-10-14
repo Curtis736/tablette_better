@@ -60,8 +60,8 @@ docker-compose -f docker-compose.dev.yml up -d
 ## 📋 Services
 
 ### Backend (sedi-backend)
-- **Port**: 3000
-- **Health check**: http://localhost:3000/api/health
+- **Port**: 3001
+- **Health check**: http://localhost:3001/api/health
 - **Logs**: `docker logs sedi-tablette-backend`
 - **Debug port** (dev): 9229
 
@@ -77,7 +77,7 @@ docker-compose -f docker-compose.dev.yml up -d
 #### Backend
 ```env
 NODE_ENV=production
-PORT=3000
+PORT=3001
 DB_SERVER=SERVEURERP
 DB_DATABASE=SEDI_ERP
 DB_USER=QUALITE
@@ -158,7 +158,7 @@ docker-compose logs -f sedi-frontend
 ## 🔍 Health Checks
 
 ### Vérifications automatiques
-- **Backend**: `curl http://localhost:3000/api/health`
+- **Backend**: `curl http://localhost:3001/api/health`
 - **Frontend**: `curl http://localhost/health`
 
 ### Statuts possibles
@@ -216,7 +216,7 @@ docker-compose build --no-cache [service]
 docker-compose exec sedi-backend ping SERVEURERP
 
 # Tester la connexion SQL
-docker-compose exec sedi-backend curl http://localhost:3000/api/health
+docker-compose exec sedi-backend curl http://localhost:3001/api/health
 ```
 
 #### Problème de permissions

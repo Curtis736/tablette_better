@@ -53,7 +53,7 @@ echo $BACKEND_PID > ../logs/backend.pid
 echo $FRONTEND_PID > ../logs/frontend.pid
 
 echo "✅ SEDI Tablette démarré!"
-echo "📊 Backend: http://localhost:3000"
+echo "📊 Backend: http://localhost:3001"
 echo "🌐 Frontend: http://localhost:8080"
 echo "📝 Logs: ~/Sedi_ati/tablette_better/logs/"
 

@@ -35,7 +35,7 @@ tablettev2/
 - Health check endpoint
 - Logging avec Morgan
 
-**Ports :** 3000 (développement), 3001 (production)
+**Ports :** 3001 (développement et production)
 
 ### 📄 `backend/config/database.js`
 **Configuration de la base de données SQL Server**
@@ -455,7 +455,7 @@ tablettev2/
 
 **Fonctionnalités :**
 - Arrêt des processus existants
-- Démarrage backend (port 3000)
+- Démarrage backend (port 3001)
 - Démarrage frontend (port 8080)
 - Ouverture automatique du navigateur
 
@@ -590,7 +590,7 @@ docker-compose up -d
 ## 🌐 ACCÈS
 
 - **Frontend** : http://localhost:8080
-- **Backend API** : http://localhost:3000
+- **Backend API** : http://localhost:3001
 - **Code Admin** : 929
 
 ---
