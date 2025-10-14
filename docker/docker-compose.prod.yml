@@ -1,5 +1,5 @@
 services:
-  # Backend API SEDI Tablette
+  # Backend API SEDI Tablette - Production
   sedi-backend:
     build:
       context: ..
@@ -14,7 +14,7 @@ services:
       - DB_PASSWORD=QUALITE
       - DB_ENCRYPT=false
       - DB_TRUST_CERT=true
-      - FRONTEND_URL=http://localhost
+      - FRONTEND_URL=http://localhost:8080
       - API_TIMEOUT=30000
       - API_RETRY_ATTEMPTS=3
       - CACHE_ENABLED=true
@@ -23,7 +23,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
       - SESSION_SECRET=${SESSION_SECRET:-change-me-in-production}
     ports:
-      - "3001:3001"
+      - "3001:3001"  # Port cohérent: 3001 externe -> 3001 interne
     networks:
       - sedi-network
     restart: unless-stopped
@@ -32,6 +32,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
     labels:
       - "com.sedi.service=backend"
+      - "com.sedi.environment=production"
       - "com.sedi.version=2.2"
       - "com.sedi.description=SEDI Tablette Backend API with Pause Management"
     healthcheck:
@@ -41,14 +42,14 @@ services:
       retries: 3
       start_period: 40s
 
-  # Frontend Nginx SEDI Tablette
+  # Frontend Nginx SEDI Tablette - Production
   sedi-frontend:
     build:
       context: ..
       dockerfile: docker/Dockerfile.frontend
     container_name: sedi-tablette-frontend
     ports:
-      - "8080:80"
+      - "8080:80"  # Port cohérent: 8080 externe -> 80 interne
     depends_on:
       sedi-backend:
         condition: service_healthy
@@ -60,6 +61,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
     labels:
       - "com.sedi.service=frontend"
+      - "com.sedi.environment=production"
       - "com.sedi.version=2.2"
       - "com.sedi.description=SEDI Tablette Frontend with Pause Management"
     healthcheck:
@@ -75,6 +77,7 @@ networks:
     driver: bridge
     labels:
       - "com.sedi.network=main"
+      - "com.sedi.environment=production"
 
 volumes:
   sedi-logs:
@@ -82,4 +85,5 @@ volumes:
     driver: local
     labels:
       - "com.sedi.volume=logs"
+      - "com.sedi.environment=production"
       - "com.sedi.description=Logs centralisés pour SEDI Tablette"
