@@ -2,7 +2,7 @@ const sql = require('mssql');
 
 // Configuration de la base de données SQL Server
 const config = {
-    server: process.env.DB_SERVER || 'SERVEURERP',
+    server: process.env.DB_SERVER || '192.168.1.14',
     database: process.env.DB_DATABASE || 'SEDI_ERP',
     user: process.env.DB_USER || 'QUALITE',
     password: process.env.DB_PASSWORD || 'QUALITE',

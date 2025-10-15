@@ -26,6 +26,10 @@ app.use(cors({
         'http://127.0.0.1:3001',
         'http://192.168.1.26:8080',
         'http://192.168.1.26:3001',
+        'http://192.168.1.14:8080',
+        'http://192.168.1.14:3001',
+        'http://serveurerp.sedi.local:8080',
+        'http://serveurerp.sedi.local:3001',
         process.env.FRONTEND_URL
     ].filter(Boolean),
     credentials: true

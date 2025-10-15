@@ -12,10 +12,18 @@ class ApiService {
         } else if (currentPort === '8080') {
             // Environnement de développement - frontend sur 8080, backend sur 3001
             // Utiliser l'IP du serveur au lieu de localhost
-            this.baseUrl = `http://${currentHost}:3001/api`;
+            if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
+                this.baseUrl = 'http://192.168.1.14:3001/api';
+            } else {
+                this.baseUrl = `http://${currentHost}:3001/api`;
+            }
         } else {
             // Autre cas - utiliser l'IP du serveur par défaut
-            this.baseUrl = `http://${currentHost}:3001/api`;
+            if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
+                this.baseUrl = 'http://192.168.1.14:3001/api';
+            } else {
+                this.baseUrl = `http://${currentHost}:3001/api`;
+            }
         }
         
         this.defaultHeaders = {
