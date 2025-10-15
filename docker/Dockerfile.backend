@@ -1,8 +1,9 @@
 # Dockerfile multi-stage pour le backend SEDI Tablette Node.js
 
 # Stage 1: Base image avec dépendances communes
-FROM node:18-alpine AS base
-RUN apk add --no-cache curl dumb-init
+# Utilisation d'Alpine Linux avec installation manuelle de Node.js
+FROM alpine:3.18 AS base
+RUN apk add --no-cache nodejs npm curl dumb-init
 WORKDIR /app
 
 # Stage 2: Dependencies (pour le cache des layers)
@@ -38,7 +39,7 @@ EXPOSE 3001
 # Variables d'environnement par défaut
 ENV NODE_ENV=production \
     PORT=3001 \
-    DB_SERVER=SERVEURERP \
+    DB_SERVER=192.168.1.14 \
     DB_DATABASE=SEDI_ERP \
     DB_USER=QUALITE \
     DB_PASSWORD=QUALITE \
