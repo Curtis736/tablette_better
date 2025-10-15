@@ -80,3 +80,5 @@ GO
 PRINT 'Script de création de la table des commentaires terminé avec succès';
 GO
 
+
+

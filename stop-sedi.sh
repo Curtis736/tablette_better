@@ -25,3 +25,5 @@ pkill -f "http-server" || true
 echo "✅ SEDI Tablette arrêté!"
 
 
+
+

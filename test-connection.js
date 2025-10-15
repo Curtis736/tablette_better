@@ -1,5 +1,60 @@
 // Script de test de connectivité pour diagnostiquer l'erreur "Failed to fetch"
-const fetch = require('node-fetch');
+// Utilisation du fetch natif de Node.js (disponible depuis v18+)
+const https = require('https');
+const http = require('http');
+const { URL } = require('url');
+
+// Fonction pour faire des requêtes HTTP/HTTPS
+function makeRequest(url) {
+    return new Promise((resolve, reject) => {
+        const urlObj = new URL(url);
+        const isHttps = urlObj.protocol === 'https:';
+        const client = isHttps ? https : http;
+        
+        const options = {
+            hostname: urlObj.hostname,
+            port: urlObj.port || (isHttps ? 443 : 80),
+            path: urlObj.pathname + urlObj.search,
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            timeout: 5000
+        };
+        
+        const req = client.request(options, (res) => {
+            let data = '';
+            
+            res.on('data', (chunk) => {
+                data += chunk;
+            });
+            
+            res.on('end', () => {
+                try {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                        const jsonData = JSON.parse(data);
+                        resolve(jsonData);
+                    } else {
+                        reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`));
+                    }
+                } catch (parseError) {
+                    reject(new Error(`Erreur parsing JSON: ${parseError.message}`));
+                }
+            });
+        });
+        
+        req.on('error', (error) => {
+            reject(error);
+        });
+        
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Timeout'));
+        });
+        
+        req.end();
+    });
+}
 
 async function testConnection() {
     console.log('🔍 Test de connectivité...\n');
@@ -16,40 +71,23 @@ async function testConnection() {
         
         try {
             // Test de santé
-            const healthResponse = await fetch(`${baseUrl}/api/health`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                timeout: 5000
-            });
-            
-            if (healthResponse.ok) {
-                const healthData = await healthResponse.json();
+            const healthData = await makeRequest(`${baseUrl}/api/health`);
+            if (healthData) {
                 console.log(`✅ ${baseUrl} - Santé OK:`, healthData.status);
                 
                 // Test de l'endpoint opérateur
                 try {
-                    const operatorResponse = await fetch(`${baseUrl}/api/operators/929`, {
-                        method: 'GET',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        timeout: 5000
-                    });
-                    
-                    if (operatorResponse.ok) {
-                        const operatorData = await operatorResponse.json();
+                    const operatorData = await makeRequest(`${baseUrl}/api/operators/929`);
+                    if (operatorData) {
                         console.log(`✅ ${baseUrl} - Opérateur 929 trouvé:`, operatorData.nom);
                     } else {
-                        console.log(`❌ ${baseUrl} - Erreur opérateur:`, operatorResponse.status, operatorResponse.statusText);
+                        console.log(`❌ ${baseUrl} - Opérateur 929 non trouvé`);
                     }
                 } catch (operatorError) {
                     console.log(`❌ ${baseUrl} - Erreur opérateur:`, operatorError.message);
                 }
-                
             } else {
-                console.log(`❌ ${baseUrl} - Erreur santé:`, healthResponse.status, healthResponse.statusText);
+                console.log(`❌ ${baseUrl} - Erreur santé`);
             }
             
         } catch (error) {

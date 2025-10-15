@@ -122,3 +122,5 @@ PRINT '=== Configuration terminée avec succès ===';
 PRINT 'Fin du script: ' + CONVERT(VARCHAR, GETDATE(), 120);
 GO
 
+
+
