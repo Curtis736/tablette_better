@@ -113,6 +113,21 @@ class OperateurInterface {
                 }, 10);
             }
         });
+
+        // Focus automatique et positionnement après "LT" à chaque interaction
+        this.lancementInput.addEventListener('click', (e) => {
+            if (e.target.value === 'LT') {
+                setTimeout(() => {
+                    e.target.setSelectionRange(2, 2);
+                }, 10);
+            }
+        });
+
+        // Focus automatique au chargement de la page
+        this.lancementInput.addEventListener('load', () => {
+            this.lancementInput.focus();
+            this.lancementInput.setSelectionRange(2, 2);
+        });
     }
 
     setupEventListeners() {
