@@ -9,13 +9,12 @@ class ApiService {
         if (!currentPort || currentPort === '80' || currentPort === '443') {
             // Environnement de production - utiliser le proxy Nginx
             this.baseUrl = `${window.location.protocol}//${window.location.host}/api`;
-        } else if (currentPort === '8080') {
-            // Environnement de développement - frontend sur 8080, backend sur 3001
-            // Utiliser l'IP du serveur au lieu de localhost
-            this.baseUrl = `http://${currentHost}:3001/api`;
+        } else if (currentPort === '8080' && currentHost === 'localhost') {
+            // Environnement de développement local - frontend sur 8080, backend sur 3001
+            this.baseUrl = `http://localhost:3001/api`;
         } else {
-            // Autre cas - utiliser l'IP du serveur par défaut
-            this.baseUrl = `http://${currentHost}:3001/api`;
+            // Environnement de production avec port 8080 - utiliser le proxy Nginx
+            this.baseUrl = `${window.location.protocol}//${window.location.host}/api`;
         }
         
         this.defaultHeaders = {
