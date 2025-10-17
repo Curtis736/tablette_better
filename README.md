@@ -1,207 +1,50 @@
-# 🏭 SEDI TABLETTE - Interface de Gestion des Opérations
+# SEDI Tablette
 
-## 📋 **RÉSUMÉ DU PROJET**
+## 🚀 Déploiement simple
 
-Application web pour la gestion des opérations de production via tablette, intégrée à l'ERP SEDI.
-
-### ✅ **FONCTIONNALITÉS IMPLÉMENTÉES**
-
-- **Interface Opérateur** : Saisie manuelle de code de lancement, démarrage, pause, reprise, arrêt
-- **Interface Admin** : Statistiques et suivi des opérations (code 929)
-- **Stockage BDD** : Utilisation de `SEDI_APP_INDEPENDANTE.ABHISTORIQUE_OPERATEURS`
-- **Lecture des données** : Intégration avec `RESSOURC`, `LCTE`, `abetemps_temp`, `abetemps_Pause`
-
-### 🗄️ **ARCHITECTURE BASE DE DONNÉES**
-
-**Tables utilisées :**
-- **`[SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]`** : Stockage des opérations (INSERT autorisé)
-- **`[SEDI_ERP].[dbo].[RESSOURC]`** : Informations opérateurs (lecture seule)
-- **`[SEDI_ERP].[dbo].[LCTE]`** : Informations lancements (lecture seule)
-- **`[SEDI_ERP].[GPSQL].[abetemps_temp]`** : Données temporaires (lecture seule)
-- **`[SEDI_ERP].[GPSQL].[abetemps_Pause]`** : Historique pauses (lecture seule)
-
-**Structure ABHISTORIQUE_OPERATEURS :**
-```sql
-NoEnreg          -- ID auto-increment
-Ident            -- DEBUT, PAUSE, REPRISE, FIN
-DateTravail      -- Timestamp de l'action
-CodeLanctImprod  -- Code du lancement
-Phase            -- Phase de l'opération
-CodeRubrique     -- ID de l'opérateur
-Statut           -- ACTIF, PAUSE, TERMINE
-DateCreation     -- Date de création
-```
-
-## 🚀 **DÉMARRAGE RAPIDE**
-
-### **Développement Local**
+### 1. Cloner le repo
 ```bash
-# Terminal 1 - Backend
-cd backend
-npm install && npm start
-
-# Terminal 2 - Frontend  
-cd frontend
-npm install && npx http-server . -p 8080 --cors
+git clone https://github.com/Curtis736/tablette_better.git
+cd tablette_better
 ```
 
-### **Production avec Docker**
+### 2. Déployer
 ```bash
-# Démarrer en production
-docker-compose -f docker/docker-compose.yml up -d
-
-# Démarrer en développement
-docker-compose -f docker/docker-compose.dev.yml up -d
+docker-compose -f docker/docker-compose.production.yml up -d
 ```
 
-### **Déploiement sur Serveur**
-Voir le [Guide de Déploiement Git](docs/GIT_DEPLOYMENT.md) pour une approche simple et professionnelle.
+C'est tout ! 🎉
 
-### **Option 3 : Depuis la racine**
+## ✅ Vérification
+
 ```bash
-npm run start:backend    # Démarre le backend
-npm run start:frontend   # Démarre le frontend
+# Vérifier que les containers tournent
+docker ps
+
+# Tester l'accès
+curl http://localhost:3001/api/health
+curl http://localhost:8080
 ```
 
-## 🌐 **ACCÈS À L'APPLICATION**
+## 🌐 URLs d'accès
 
-- **Frontend** : http://localhost:8080
 - **Backend API** : http://localhost:3001
-- **Code Admin** : **929**
+- **Frontend Web** : http://localhost:8080
 
-## 📱 **UTILISATION**
+## 🛠️ Commandes utiles
 
-### **Interface Opérateur**
-1. Saisir le code de lancement
-2. Appuyer sur **Entrée** ou cliquer **Démarrer**
-3. Utiliser **Pause** / **Reprendre** / **Terminer** selon besoin
-
-### **Interface Admin (Code 929)**
-- Statistiques en temps réel
-- Liste des opérations du jour
-- Suivi des opérateurs actifs
-
-## 🔧 **CONFIGURATION**
-
-### **Variables d'environnement (backend/.env)**
-```env
-NODE_ENV=development
-PORT=3001
-FRONTEND_URL=http://localhost:8080
-
-# Base de données
-DB_SERVER=SERVEURERP
-DB_DATABASE=SEDI_ERP
-DB_USER=QUALITE
-DB_PASSWORD=QUALITE
-DB_ENCRYPT=false
-DB_TRUST_CERT=true
-```
-
-## 📁 **STRUCTURE DU PROJET**
-
-```
-tablettev2/
-├── backend/                 # API Node.js + Express
-│   ├── config/
-│   │   └── database.js     # Configuration BDD
-│   ├── routes/
-│   │   ├── admin.js        # Routes admin
-│   │   ├── auth.js         # Authentification
-│   │   ├── lancements.js   # Gestion lancements
-│   │   ├── operations.js   # Gestion opérations ⭐
-│   │   └── operators.js    # Gestion opérateurs
-│   ├── package.json
-│   └── server.js           # Point d'entrée
-├── frontend/               # Interface web vanilla JS
-│   ├── components/
-│   │   ├── AdminPage.js
-│   │   ├── App.js
-│   │   └── OperateurInterface.js ⭐
-│   ├── services/
-│   │   └── ApiService.js
-│   ├── assets/
-│   │   └── styles.css
-│   ├── index.html
-│   └── package.json
-├── package.json            # Scripts racine
-└── start.bat              # Script de démarrage ⭐
-```
-
-## 🔄 **FLUX DES OPÉRATIONS**
-
-1. **Démarrage** : `INSERT ABHISTORIQUE_OPERATEURS (Ident='DEBUT')`
-2. **Pause** : `INSERT ABHISTORIQUE_OPERATEURS (Ident='PAUSE')`
-3. **Reprise** : `INSERT ABHISTORIQUE_OPERATEURS (Ident='REPRISE')`
-4. **Fin** : `INSERT ABHISTORIQUE_OPERATEURS (Ident='FIN')`
-
-## 🛠️ **DÉPANNAGE**
-
-### **Backend ne démarre pas**
 ```bash
-# Vérifier les ports occupés
-netstat -ano | findstr :3001
+# Voir les logs
+docker-compose -f docker/docker-compose.production.yml logs -f
 
-# Arrêter les processus
-taskkill /F /IM node.exe
+# Arrêter les services
+docker-compose -f docker/docker-compose.production.yml down
 
-# Redémarrer
-cd backend && npm start
+# Redémarrer les services
+docker-compose -f docker/docker-compose.production.yml restart
 ```
 
-### **Erreur de base de données**
-- Vérifier la connexion au serveur `SERVEURERP`
-- Contrôler les permissions sur `SEDI_APP_INDEPENDANTE`
-- Vérifier l'utilisateur `QUALITE`
+## 📋 Prérequis
 
-### **Frontend ne se connecte pas**
-- Vérifier que le backend est démarré (port 3001)
-- Contrôler les erreurs CORS dans la console
-- Tester l'API : http://localhost:3001/api/health
-
-## 📊 **API ENDPOINTS**
-
-### **Opérations**
-- `POST /api/operations/start` - Démarrer opération
-- `POST /api/operations/pause` - Mettre en pause
-- `POST /api/operations/resume` - Reprendre
-- `POST /api/operations/stop` - Terminer
-- `GET /api/operations/current/:operatorId` - État actuel
-
-### **Admin**
-- `GET /api/admin/stats` - Statistiques
-- `GET /api/admin/operations` - Liste opérations
-
-### **Autres**
-- `GET /api/health` - Santé de l'API
-- `GET /api/operators/:code` - Info opérateur
-
-## 🎯 **STATUT DU PROJET**
-
-✅ **Terminé et fonctionnel**
-- Interface opérateur simplifiée
-- Stockage en base de données réel
-- Lecture des données ERP existantes
-- Interface admin avec statistiques
-- Scripts de démarrage automatique
-
----
-
-**Développé pour SEDI ERP - Interface Tablette Production**
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+- Docker et Docker Compose installés
+- Ports 3001 et 8080 disponibles

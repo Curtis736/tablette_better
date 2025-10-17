@@ -1,7 +1,9 @@
 services:
   # Backend API SEDI Tablette - Configuration Production
   sedi-backend:
-    image: docker-sedi-backend
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
     container_name: sedi-tablette-backend
     environment:
       - NODE_ENV=production
@@ -43,7 +45,9 @@ services:
 
   # Frontend Nginx SEDI Tablette - Configuration Production
   sedi-frontend:
-    image: docker-sedi-frontend
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
     container_name: sedi-tablette-frontend
     ports:
       - "8080:80"
