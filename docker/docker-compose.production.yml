@@ -1,9 +1,7 @@
 services:
-  # Backend API SEDI Tablette
+  # Backend API SEDI Tablette - Configuration Production
   sedi-backend:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.backend
+    image: docker-sedi-backend
     container_name: sedi-tablette-backend
     environment:
       - NODE_ENV=production
@@ -20,15 +18,15 @@ services:
       - CACHE_ENABLED=true
       - CACHE_TTL=300000
       - LOG_LEVEL=info
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
-      - SESSION_SECRET=${SESSION_SECRET:-change-me-in-production}
+      - JWT_SECRET=change-me-in-production
+      - SESSION_SECRET=change-me-in-production
     ports:
       - "3001:3001"
     networks:
-      - sedi-network
+      - sedi-tablette-network
     restart: unless-stopped
     volumes:
-      - sedi-logs:/app/logs
+      - sedi-tablette-logs:/app/logs:rw
       - /etc/localtime:/etc/localtime:ro
     labels:
       - "com.sedi.service=backend"
@@ -40,12 +38,12 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    user: node
+    working_dir: /app
 
-  # Frontend Nginx SEDI Tablette
+  # Frontend Nginx SEDI Tablette - Configuration Production
   sedi-frontend:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.frontend
+    image: docker-sedi-frontend
     container_name: sedi-tablette-frontend
     ports:
       - "8080:80"
@@ -53,10 +51,10 @@ services:
       sedi-backend:
         condition: service_healthy
     networks:
-      - sedi-network
+      - sedi-tablette-network
     restart: unless-stopped
     volumes:
-      - sedi-logs:/var/log/nginx
+      - sedi-tablette-logs:/var/log/nginx:rw
       - /etc/localtime:/etc/localtime:ro
     labels:
       - "com.sedi.service=frontend"
@@ -68,16 +66,21 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+    environment:
+      - NGINX_VERSION=1.25.5
+      - NGINX_WORKER_PROCESSES=auto
+      - NGINX_WORKER_CONNECTIONS=1024
+      - NGINX_KEEPALIVE_TIMEOUT=65
 
 networks:
-  sedi-network:
+  sedi-tablette-network:
     name: sedi-tablette-network
     driver: bridge
     labels:
       - "com.sedi.network=main"
 
 volumes:
-  sedi-logs:
+  sedi-tablette-logs:
     name: sedi-tablette-logs
     driver: local
     labels:

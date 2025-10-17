@@ -18,6 +18,29 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware de sécurité
 app.use(helmet());
+
+// Ensure CORS headers are present on all responses (including errors)
+// and reply to OPTIONS preflight requests even if later middleware/errors occur.
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+        // Echo back the origin so browsers accept credentialed responses
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        // Inform caches that response varies by origin
+        res.setHeader('Vary', 'Origin');
+    }
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+
+    if (req.method === 'OPTIONS') {
+        // short-circuit preflight
+        return res.status(204).end();
+    }
+
+    next();
+});
+
 app.use(cors({
     origin: [
         'http://localhost:8080',
@@ -26,10 +49,6 @@ app.use(cors({
         'http://127.0.0.1:3001',
         'http://192.168.1.26:8080',
         'http://192.168.1.26:3001',
-        'http://192.168.1.14:8080',
-        'http://192.168.1.14:3001',
-        'http://serveurerp.sedi.local:8080',
-        'http://serveurerp.sedi.local:3001',
         process.env.FRONTEND_URL
     ].filter(Boolean),
     credentials: true

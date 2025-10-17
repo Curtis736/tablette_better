@@ -1,9 +1,8 @@
 # Dockerfile optimisé pour le frontend SEDI Tablette
-# Utilisation d'Alpine Linux avec installation manuelle de Nginx
-FROM alpine:3.18
+FROM nginx:1.25-alpine
 
-# Installer Nginx, curl et dumb-init
-RUN apk add --no-cache nginx curl dumb-init
+# Installer curl et dumb-init pour les health checks et la gestion des signaux
+RUN apk add --no-cache curl dumb-init
 
 # Créer un utilisateur nginx non-root
 RUN addgroup -g 1001 -S nginx-app && \

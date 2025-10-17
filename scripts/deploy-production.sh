@@ -1,58 +1,67 @@
 #!/bin/bash
+# Script de déploiement pour SEDI Tablette en production
+# Usage: ./deploy-production.sh
 
-# Script de déploiement pour SEDI Tablette - Production
-# Ce script assure la cohérence des ports et rebuild complet
+echo "=== Déploiement SEDI Tablette Production ==="
 
-echo "🚀 Déploiement SEDI Tablette - Production"
-echo "========================================"
-
-# Vérifier qu'on est dans le bon répertoire
-if [ ! -f "docker-compose.yml" ]; then
-    echo "❌ Erreur: docker-compose.yml non trouvé. Êtes-vous dans le bon répertoire ?"
+# Vérifier si Docker est installé
+if ! command -v docker &> /dev/null; then
+    echo "❌ Docker n'est pas installé"
     exit 1
 fi
 
-echo "📋 Étape 1: Arrêt des services existants"
-docker-compose -f docker-compose.yml down
+# Vérifier si Docker Compose est installé
+if ! command -v docker-compose &> /dev/null; then
+    echo "❌ Docker Compose n'est pas installé"
+    exit 1
+fi
 
-echo "📋 Étape 2: Suppression des conteneurs"
-docker rm $(docker ps -aq) 2>/dev/null || true
+# Aller dans le dossier du projet
+cd "$(dirname "$0")/.."
 
-echo "📋 Étape 3: Suppression des images"
-docker rmi $(docker images -q) 2>/dev/null || true
+echo "1. Arrêt des containers existants..."
+docker-compose -f docker/docker-compose.production.yml down
 
-echo "📋 Étape 4: Nettoyage des volumes orphelins"
-docker volume prune -f
+echo "2. Suppression des containers et volumes (optionnel)..."
+read -p "Voulez-vous supprimer les volumes existants ? (y/N): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    docker-compose -f docker/docker-compose.production.yml down -v
+    docker volume rm sedi-tablette-logs 2>/dev/null || true
+fi
 
-echo "📋 Étape 5: Nettoyage des réseaux orphelins"
-docker network prune -f
+echo "3. Construction des images..."
+docker-compose -f docker/docker-compose.production.yml build
 
-echo "📋 Étape 6: Rebuild complet sans cache"
-docker-compose -f docker-compose.yml build --no-cache
+echo "4. Démarrage des services..."
+docker-compose -f docker/docker-compose.production.yml up -d
 
-echo "📋 Étape 7: Démarrage des services"
-docker-compose -f docker-compose.yml up -d
+echo "5. Attente du démarrage..."
+sleep 30
 
-echo "📋 Étape 8: Attente du démarrage"
-sleep 10
+echo "6. Vérification de l'état..."
+docker-compose -f docker/docker-compose.production.yml ps
 
-echo "📋 Étape 9: Vérification des ports"
-echo "Conteneurs en cours d'exécution:"
-docker ps
+echo "7. Test de connectivité..."
+echo "Test du backend..."
+curl -s -o /dev/null -w "Backend: %{http_code}\n" http://localhost:3001/api/health 2>/dev/null || echo "Backend: Non accessible"
 
+echo "Test du frontend..."
+curl -s -o /dev/null -w "Frontend: %{http_code}\n" http://localhost:8080 2>/dev/null || echo "Frontend: Non accessible"
+
+echo "8. Logs des services..."
+echo "=== Logs Backend (dernières 10 lignes) ==="
+docker logs --tail 10 sedi-tablette-backend
+
+echo "=== Logs Frontend (dernières 10 lignes) ==="
+docker logs --tail 10 sedi-tablette-frontend
+
+echo "=== Déploiement terminé ==="
+echo "URLs d'accès:"
+echo "  Backend:  http://localhost:3001"
+echo "  Frontend: http://localhost:8080"
 echo ""
-echo "📋 Étape 10: Tests de connectivité"
-echo "Test backend direct (port 3001):"
-curl -f http://localhost:3001/api/health 2>/dev/null && echo "✅ Backend accessible" || echo "❌ Backend non accessible"
-
-echo "Test frontend (port 8080):"
-curl -f http://localhost:8080/health 2>/dev/null && echo "✅ Frontend accessible" || echo "❌ Frontend non accessible"
-
-echo "Test proxy API (frontend vers backend):"
-curl -f http://localhost:8080/api/health 2>/dev/null && echo "✅ Proxy API fonctionnel" || echo "❌ Proxy API non fonctionnel"
-
-echo ""
-echo "🎉 Déploiement terminé !"
-echo "Frontend: http://localhost:8080"
-echo "Backend: http://localhost:3001"
-echo "API via proxy: http://localhost:8080/api"
+echo "Commandes utiles:"
+echo "  docker-compose -f docker/docker-compose.production.yml ps"
+echo "  docker-compose -f docker/docker-compose.production.yml logs -f"
+echo "  docker-compose -f docker/docker-compose.production.yml down"

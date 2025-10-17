@@ -11,10 +11,10 @@ class ApiService {
             this.baseUrl = `${window.location.protocol}//${window.location.host}/api`;
         } else if (currentPort === '8080') {
             // Environnement de développement - frontend sur 8080, backend sur 3001
-            // En développement local, utiliser localhost
+            // Utiliser l'IP du serveur au lieu de localhost
             this.baseUrl = `http://${currentHost}:3001/api`;
         } else {
-            // Autre cas - utiliser localhost par défaut en développement
+            // Autre cas - utiliser l'IP du serveur par défaut
             this.baseUrl = `http://${currentHost}:3001/api`;
         }
         
