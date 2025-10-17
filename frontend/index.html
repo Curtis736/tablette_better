@@ -126,6 +126,36 @@
                     </div>
                 </div>
 
+                <!-- Historique des lancements -->
+                <div class="section">
+                    <h2><i class="fas fa-history"></i> Mon Historique</h2>
+                    <div class="history-controls">
+                        <button id="refreshHistoryBtn" class="btn-primary">
+                            <i class="fas fa-sync"></i>
+                            Actualiser
+                        </button>
+                    </div>
+                    <div class="data-table tablet-optimized">
+                        <div class="table-container">
+                            <table id="operatorHistoryTable">
+                                <thead>
+                                    <tr>
+                                        <th>Code</th>
+                                        <th>Désignation</th>
+                                        <th>Phase</th>
+                                        <th>Début</th>
+                                        <th>Fin</th>
+                                        <th>Statut</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="operatorHistoryTableBody">
+                                    <tr><td colspan="6" class="no-data">Chargement de l'historique...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Section Commentaires -->
                 <div class="section">
                     <h2><i class="fas fa-comments"></i> Commentaires</h2>
@@ -149,36 +179,6 @@
                         <div class="no-comments">
                             <i class="fas fa-comment-slash"></i>
                             <p>Aucun commentaire pour le moment</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Historique des lancements -->
-                <div class="section">
-                    <h2><i class="fas fa-history"></i> Mon Historique</h2>
-                    <div class="history-controls">
-                        <button id="refreshHistoryBtn" class="btn-primary">
-                            <i class="fas fa-sync"></i>
-                            Actualiser
-                        </button>
-                    </div>
-                    <div class="data-table">
-                        <div class="table-container">
-                            <table id="operatorHistoryTable">
-                                <thead>
-                                    <tr>
-                                        <th>Code Lancement</th>
-                                        <th>Designation</th>
-                                        <th>Phase</th>
-                                        <th>Heure Début</th>
-                                        <th>Heure Fin</th>
-                                        <th>Statut</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="operatorHistoryTableBody">
-                                    <tr><td colspan="6" class="no-data">Chargement de l'historique...</td></tr>
-                                </tbody>
-                            </table>
                         </div>
                     </div>
                 </div>

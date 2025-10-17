@@ -116,13 +116,21 @@ class OperateurInterface {
     }
 
     setupEventListeners() {
-        // Validation du code de lancement en temps réel
+        // Validation du code de lancement en temps réel avec auto-vérification
         this.lancementInput.addEventListener('input', () => this.handleLancementInput());
         this.lancementInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' || e.keyCode === 13) {
                 e.preventDefault();
                 this.validateAndSelectLancement();
             }
+        });
+        
+        // Auto-vérification du LT après 1 seconde d'inactivité
+        this.lancementInput.addEventListener('input', () => {
+            clearTimeout(this.autoValidationTimeout);
+            this.autoValidationTimeout = setTimeout(() => {
+                this.autoValidateLancement();
+            }, 1000);
         });
         
         // Contrôles de lancement
@@ -147,13 +155,13 @@ class OperateurInterface {
             this.selectedLancement.textContent = code;
             this.lancementDetails.innerHTML = `
                 <strong>Code: ${code}</strong><br>
-                <small>Appuyez sur Entrée ou cliquez sur Démarrer pour valider</small>
+                <span class="status-badge status-pending">En attente de validation</span>
             `;
             
             // Activer le bouton démarrer seulement si pas d'opération en cours
             if (!this.isRunning) {
                 this.startBtn.disabled = false;
-                this.startBtn.textContent = 'Démarrer';
+                this.startBtn.innerHTML = '<i class="fas fa-play"></i> Démarrer';
             }
         } else {
             // Cacher les contrôles si le champ est vide
@@ -161,6 +169,67 @@ class OperateurInterface {
                 this.controlsSection.style.display = 'none';
             }
         }
+    }
+
+    // Auto-vérification du lancement après 1 seconde d'inactivité
+    async autoValidateLancement() {
+        const code = this.lancementInput.value.trim();
+        
+        // Vérifier si le code est valide (au moins 3 caractères après "LT")
+        if (code.length >= 3 && code.startsWith('LT')) {
+            try {
+                // Afficher un indicateur de chargement
+                this.lancementDetails.innerHTML = `
+                    <strong>Code: ${code}</strong><br>
+                    <span class="status-badge status-loading">
+                        <i class="fas fa-spinner fa-spin"></i> Vérification...
+                    </span>
+                `;
+                
+                // Simuler une vérification (vous pouvez remplacer par un vrai appel API)
+                await this.validateLancementCode(code);
+                
+                // Si la validation réussit, afficher le succès
+                this.lancementDetails.innerHTML = `
+                    <strong>Code: ${code}</strong><br>
+                    <span class="status-badge status-success">
+                        <i class="fas fa-check"></i> Code validé
+                    </span>
+                `;
+                
+                // Activer le bouton démarrer
+                this.startBtn.disabled = false;
+                this.startBtn.innerHTML = '<i class="fas fa-play"></i> Démarrer';
+                
+            } catch (error) {
+                // Si la validation échoue, afficher l'erreur
+                this.lancementDetails.innerHTML = `
+                    <strong>Code: ${code}</strong><br>
+                    <span class="status-badge status-error">
+                        <i class="fas fa-times"></i> Code invalide
+                    </span>
+                `;
+                
+                // Désactiver le bouton démarrer
+                this.startBtn.disabled = true;
+                this.startBtn.innerHTML = '<i class="fas fa-play"></i> Démarrer';
+            }
+        }
+    }
+
+    // Méthode pour valider le code de lancement
+    async validateLancementCode(code) {
+        // Simulation d'une validation (remplacer par un vrai appel API)
+        return new Promise((resolve, reject) => {
+            setTimeout(() => {
+                // Simuler une validation basée sur la longueur du code
+                if (code.length >= 5) {
+                    resolve(true);
+                } else {
+                    reject(new Error('Code trop court'));
+                }
+            }, 500);
+        });
     }
 
     async validateAndSelectLancement() {
