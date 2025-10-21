@@ -6,31 +6,33 @@ services:
       dockerfile: docker/Dockerfile.backend
     container_name: sedi-tablette-backend
     environment:
-          - NODE_ENV=production
-          - PORT=3001
-          - DB_SERVER=192.168.1.14
-          - DB_DATABASE=SEDI_ERP
-          - DB_USER=QUALITE
-          - DB_PASSWORD=QUALITE
-          - DB_ENCRYPT=false
-          - DB_TRUST_CERT=true
-          - FRONTEND_URL=http://localhost
-          - API_TIMEOUT=30000
-          - API_RETRY_ATTEMPTS=3
-          - CACHE_ENABLED=true
-          - CACHE_TTL=300000
-          - LOG_LEVEL=info
-          - JWT_SECRET=change-me-in-production
-          - SESSION_SECRET=change-me-in-production
-          # Configuration Email
-          - EMAIL_DISABLED=false
-          - EMAIL_USE_HTTP=true
-          - EMAIL_WEBHOOK_URL=http://192.168.1.14:8080/api/email-webhook
-          - EMAIL_FALLBACK_SERVICE=log
-          - SMTP_HOST=smtp.gmail.com
-          - SMTP_PORT=587
-          - SMTP_USER=boutard@sedi-ati.com
-          - SMTP_PASS=your-email-password
+      - NODE_ENV=production
+      - PORT=3001
+      - DB_SERVER=192.168.1.14
+      - DB_DATABASE=SEDI_ERP
+      - DB_USER=QUALITE
+      - DB_PASSWORD=QUALITE
+      - DB_ENCRYPT=false
+      - DB_TRUST_CERT=true
+      - FRONTEND_URL=http://192.168.1.26:8080
+      - CORS_ORIGIN=http://192.168.1.26:8080
+      - CORS_CREDENTIALS=true
+      - API_TIMEOUT=30000
+      - API_RETRY_ATTEMPTS=3
+      - CACHE_ENABLED=true
+      - CACHE_TTL=300000
+      - LOG_LEVEL=info
+      - JWT_SECRET=change-me-in-production
+      - SESSION_SECRET=change-me-in-production
+      # Configuration Email
+      - EMAIL_DISABLED=false
+      - EMAIL_USE_HTTP=true
+      - EMAIL_WEBHOOK_URL=http://192.168.1.14:8080/api/email-webhook
+      - EMAIL_FALLBACK_SERVICE=log
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_PORT=587
+      - SMTP_USER=boutard@sedi-ati.com
+      - SMTP_PASS=your-email-password
     ports:
       - "3001:3001"
     networks:
