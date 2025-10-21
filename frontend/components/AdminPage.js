@@ -353,11 +353,22 @@ class AdminPage {
         // Vider le select et ajouter l'option par défaut
         this.operatorSelect.innerHTML = '<option value="">Tous les opérateurs connectés</option>';
         
-        // Ajouter chaque opérateur
+        // Ajouter chaque opérateur avec validation
         operators.forEach(operator => {
             const option = document.createElement('option');
             option.value = operator.code;
-            option.textContent = `${operator.name} (${operator.code})`;
+            
+            // Indicateur visuel pour les opérateurs mal associés
+            let statusIcon = '';
+            if (operator.isProperlyLinked === false) {
+                statusIcon = ' ⚠️';
+            } else if (operator.isProperlyLinked === true) {
+                statusIcon = ' ✅';
+            }
+            
+            option.textContent = `${operator.name} (${operator.code})${statusIcon}`;
+            option.title = `Code: ${operator.code} | Ressource: ${operator.resourceCode || 'N/A'} | IP: ${operator.ipAddress || 'N/A'}`;
+            
             this.operatorSelect.appendChild(option);
         });
         
@@ -380,8 +391,7 @@ class AdminPage {
             // Charger les lancements de l'opérateur spécifique
             try {
                 this.isLoading = true;
-                const response = await fetch(`http://localhost:3001/api/admin/operators/${selectedOperator}/operations`);
-                const data = await response.json();
+                const data = await this.apiService.get(`/admin/operators/${selectedOperator}/operations`);
                 
                 if (data.success) {
                     console.log(`📊 ${data.count} lancements trouvés pour l'opérateur ${selectedOperator}`);
@@ -423,15 +433,7 @@ class AdminPage {
             console.log('Ajout d\'une nouvelle opération:', newOperation);
             
             // Appeler l'API pour ajouter l'opération
-            const response = await fetch('http://localhost:3001/api/admin/operations', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(newOperation)
-            });
-            
-            const result = await response.json();
+            const result = await this.apiService.post('/admin/operations', newOperation);
             
             if (result.success) {
                 this.notificationManager.success('Opération ajoutée avec succès');
@@ -460,14 +462,7 @@ class AdminPage {
             console.log('Début du transfert vers SEDI_APP_INDEPENDANTE...');
             
             // Appeler l'API de transfert
-            const response = await fetch('http://localhost:3001/api/admin/transfer', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            const result = await response.json();
+            const result = await this.apiService.post('/admin/transfer', {});
             
             if (result.success) {
                 this.notificationManager.success(`Transfert réussi : ${result.transferredCount} opérations transférées`);
@@ -561,8 +556,18 @@ class AdminPage {
                 }
             }
             
+            // Validation de l'association opérateur
+            let operatorValidation = '';
+            if (operation.operatorLinkStatus === 'MISMATCH') {
+                operatorValidation = ' ⚠️';
+            } else if (operation.operatorLinkStatus === 'NO_RESOURCE') {
+                operatorValidation = ' ❌';
+            } else if (operation.operatorLinkStatus === 'LINKED') {
+                operatorValidation = ' ✅';
+            }
+            
             row.innerHTML = `
-                <td>${operation.operatorName || '-'}</td>
+                <td>${operation.operatorName || '-'}${operatorValidation}</td>
                 <td>${operation.lancementCode || '-'} ${operation.type === 'pause' ? '<i class="fas fa-pause-circle pause-icon"></i>' : ''}</td>
                 <td>${operation.article || '-'}</td>
                 <td>${formattedStartTime}</td>
@@ -1643,8 +1648,7 @@ class AdminPage {
             this.isLoading = true;
             this.currentPage = page;
             
-            const response = await fetch(`http://localhost:3001/api/admin/operations?page=${page}&limit=25`);
-            const data = await response.json();
+            const data = await this.apiService.get(`/admin/operations?page=${page}&limit=25`);
             
             if (data.operations) {
                 this.operations = data.operations;

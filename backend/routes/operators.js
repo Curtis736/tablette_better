@@ -3,6 +3,64 @@ const express = require('express');
 const router = express.Router();
 const { executeQuery } = require('../config/database');
 const TimeUtils = require('../utils/timeUtils');
+const { authenticateOperator } = require('../middleware/auth');
+const dataIsolation = require('../middleware/dataIsolation');
+const secureQuery = require('../services/SecureQueryService');
+
+// Fonction de nettoyage des données incohérentes
+async function cleanupInconsistentData(operatorId) {
+    try {
+        console.log(`🧹 Nettoyage des données incohérentes pour l'opérateur ${operatorId}...`);
+        
+        // 1. Trouver tous les lancements de cet opérateur
+        const operatorLancementsQuery = `
+            SELECT DISTINCT CodeLanctImprod 
+            FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
+            WHERE OperatorCode = @operatorId
+        `;
+        
+        const operatorLancements = await executeQuery(operatorLancementsQuery, { operatorId });
+        
+        for (const lancement of operatorLancements) {
+            const lancementCode = lancement.CodeLanctImprod;
+            
+            // 2. Vérifier s'il y a des événements avec d'autres OperatorCode pour ce lancement
+            const inconsistentEventsQuery = `
+                SELECT NoEnreg, OperatorCode, Ident, DateCreation
+                FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
+                WHERE CodeLanctImprod = @lancementCode 
+                AND OperatorCode != @operatorId
+            `;
+            
+            const inconsistentEvents = await executeQuery(inconsistentEventsQuery, { 
+                lancementCode, 
+                operatorId 
+            });
+            
+            if (inconsistentEvents.length > 0) {
+                console.log(`⚠️ Lancement ${lancementCode} a ${inconsistentEvents.length} événements incohérents:`);
+                inconsistentEvents.forEach(e => {
+                    console.log(`  - NoEnreg: ${e.NoEnreg}, OperatorCode: ${e.OperatorCode}, Ident: ${e.Ident}`);
+                });
+                
+                // 3. Supprimer les événements incohérents
+                const deleteQuery = `
+                    DELETE FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
+                    WHERE CodeLanctImprod = @lancementCode 
+                    AND OperatorCode != @operatorId
+                `;
+                
+                await executeQuery(deleteQuery, { lancementCode, operatorId });
+                console.log(`✅ ${inconsistentEvents.length} événements incohérents supprimés pour ${lancementCode}`);
+            }
+        }
+        
+        console.log(`✅ Nettoyage terminé pour l'opérateur ${operatorId}`);
+        
+    } catch (error) {
+        console.error('❌ Erreur lors du nettoyage:', error);
+    }
+}
 
 // Fonction utilitaire pour formater les dates/heures (format HH:mm seulement, fuseau horaire Paris)
 function formatDateTime(dateTime) {
@@ -45,9 +103,9 @@ function formatDateTime(dateTime) {
 function processLancementEvents(events) {
     const lancementGroups = {};
     
-    // Grouper les événements par lancement
+    // Grouper les événements par lancement et opérateur
     events.forEach(event => {
-        const key = `${event.CodeLanctImprod}_${event.CodeRubrique}`;
+        const key = `${event.CodeLanctImprod}_${event.OperatorCode}`;  // ✅ CORRECTION : Utiliser OperatorCode
         if (!lancementGroups[key]) {
             lancementGroups[key] = [];
         }
@@ -82,7 +140,7 @@ function processLancementEvents(events) {
         
         const operation = {
             id: firstEvent.NoEnreg,
-            operatorCode: firstEvent.CodeRubrique,
+            operatorCode: firstEvent.OperatorCode,  // ✅ CORRECTION : Utiliser OperatorCode au lieu de CodeRubrique
             lancementCode: firstEvent.CodeLanctImprod,
             article: firstEvent.Article || 'N/A',
             startTime: debutEvent && debutEvent.HeureDebut ? formatDateTime(debutEvent.HeureDebut) : null,
@@ -315,6 +373,9 @@ router.post('/logout', async (req, res) => {
             });
         }
         
+        // Nettoyer les données incohérentes avant la déconnexion
+        await cleanupInconsistentData(code);
+        
         // Fermer la session active
         const logoutQuery = `
             UPDATE [SEDI_APP_INDEPENDANTE].[dbo].[ABSESSIONS_OPERATEURS]
@@ -418,9 +479,26 @@ router.get('/lancements/search', async (req, res) => {
     }
 });
 
+// Fonction de nettoyage rapide avant les opérations
+async function quickCleanup() {
+    try {
+        // Nettoyer les sessions expirées rapidement
+        const cleanupQuery = `
+            DELETE FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABSESSIONS_OPERATEURS]
+            WHERE DateCreation < DATEADD(hour, -24, GETDATE())
+        `;
+        await executeQuery(cleanupQuery);
+    } catch (error) {
+        console.error('⚠️ Erreur lors du nettoyage rapide:', error);
+    }
+}
+
 // POST /api/operators/start - Démarrer un lancement
 router.post('/start', async (req, res) => {
     try {
+        // Nettoyage rapide avant l'opération
+        await quickCleanup();
+        
         const { operatorId, lancementCode } = req.body;
         
         if (!operatorId || !lancementCode) {
@@ -660,7 +738,12 @@ router.post('/stop', async (req, res) => {
 });
 
 // GET /api/operators/:operatorCode/operations - Récupérer l'historique d'un opérateur
-router.get('/:operatorCode/operations', async (req, res) => {
+router.get('/:operatorCode/operations', 
+    dataIsolation.logAccessAttempt,
+    dataIsolation.validateDataAccess,
+    dataIsolation.filterDataByOperator,
+    authenticateOperator, 
+    async (req, res) => {
     try {
         const { operatorCode } = req.params;
         
@@ -680,6 +763,7 @@ router.get('/:operatorCode/operations', async (req, res) => {
                     h.Phase, 
                     'PRODUCTION'
                 ) as Phase,
+                h.OperatorCode,
                 h.CodeRubrique,
                 h.Statut,
                 h.HeureDebut,
@@ -689,11 +773,11 @@ router.get('/:operatorCode/operations', async (req, res) => {
                 l.DesignationLct2 as ArticleDetail
             FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS] h
             LEFT JOIN [SEDI_ERP].[dbo].[LCTE] l ON l.CodeLancement = h.CodeLanctImprod
-            WHERE h.OperatorCode = '${operatorCode}'
+            WHERE h.OperatorCode = @operatorCode
             ORDER BY h.DateCreation DESC, h.NoEnreg DESC
         `;
         
-        const events = await executeQuery(eventsQuery);
+        const events = await executeQuery(eventsQuery, { operatorCode });
         console.log(`📊 ${events.length} événements trouvés pour l'opérateur ${operatorCode}`);
         
         // Utiliser la fonction qui garde les pauses séparées
@@ -728,7 +812,7 @@ router.get('/:operatorCode/operations', async (req, res) => {
 });
 
 // GET /api/operations/current/:operatorCode - Récupérer l'opération en cours d'un opérateur
-router.get('/current/:operatorCode', async (req, res) => {
+router.get('/current/:operatorCode', authenticateOperator, async (req, res) => {
     try {
         const { operatorCode } = req.params;
         
@@ -745,12 +829,12 @@ router.get('/current/:operatorCode', async (req, res) => {
                 l.DesignationLct1 as Article
             FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS] h
             LEFT JOIN [SEDI_ERP].[dbo].[LCTE] l ON l.CodeLancement = h.CodeLanctImprod
-            WHERE h.OperatorCode = '${operatorCode}'
+            WHERE h.OperatorCode = @operatorCode
               AND h.Statut IN ('EN_COURS', 'EN_PAUSE')
             ORDER BY h.DateCreation DESC, h.NoEnreg DESC
         `;
         
-        const result = await executeQuery(query);
+        const result = await executeQuery(query, { operatorCode });
         
         if (result.length === 0) {
             return res.json({
@@ -777,6 +861,64 @@ router.get('/current/:operatorCode', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Erreur serveur lors de la récupération de l\'opération en cours'
+        });
+    }
+});
+
+// Route pour récupérer les informations d'un opérateur spécifique
+router.get('/:operatorCode', authenticateOperator, async (req, res) => {
+    const { operatorCode } = req.params;
+    
+    try {
+        // Récupérer les informations de l'opérateur
+        const operatorQuery = `
+            SELECT 
+                r.Coderessource,
+                r.Designation1,
+                r.Typeressource,
+                s.SessionId,
+                s.LoginTime,
+                s.SessionStatus,
+                s.DeviceInfo
+            FROM [SEDI_ERP].[dbo].[RESSOURC] r
+            LEFT JOIN [SEDI_APP_INDEPENDANTE].[dbo].[ABSESSIONS_OPERATEURS] s 
+                ON r.Coderessource = s.OperatorCode 
+                AND s.SessionStatus = 'ACTIVE'
+                AND CAST(s.DateCreation AS DATE) = CAST(GETDATE() AS DATE)
+            WHERE r.Coderessource = @operatorCode
+        `;
+        
+        const result = await executeQuery(operatorQuery, { operatorCode });
+        
+        if (result.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Opérateur non trouvé'
+            });
+        }
+        
+        const operator = result[0];
+        
+        res.json({
+            success: true,
+            data: {
+                id: operator.Coderessource,
+                code: operator.Coderessource,
+                name: operator.Designation1,
+                type: operator.Typeressource,
+                sessionId: operator.SessionId,
+                loginTime: operator.LoginTime,
+                sessionStatus: operator.SessionStatus,
+                deviceInfo: operator.DeviceInfo,
+                hasActiveSession: !!operator.SessionId
+            }
+        });
+        
+    } catch (error) {
+        console.error('Erreur lors de la récupération de l\'opérateur:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Erreur serveur lors de la récupération de l\'opérateur'
         });
     }
 });

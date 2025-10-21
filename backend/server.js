@@ -145,22 +145,125 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Démarrage du serveur
-app.listen(PORT, () => {
-    console.log(`🚀 Serveur SEDI Tablette démarré sur le port ${PORT}`);
-    console.log(`📊 Interface admin: http://localhost:${PORT}/api/admin`);
-    console.log(`🔍 Santé: http://localhost:${PORT}/api/health`);
-});
+// Démarrage du serveur (seulement si ce n'est pas un test)
+// Vérifier NODE_ENV au moment de l'exécution, pas de l'import
+const shouldStartServer = () => {
+    // Ne pas démarrer le serveur si NODE_ENV est 'test' ou si on est dans un contexte de test
+    return process.env.NODE_ENV !== 'test' && 
+           process.env.NODE_ENV !== 'testing' &&
+           !process.env.JEST_WORKER_ID && // Jest utilise cette variable
+           !process.argv.some(arg => arg.includes('jest')); // Vérifier si jest est dans les arguments
+};
+
+// Stocker la référence du serveur pour pouvoir le fermer proprement
+let server = null;
+
+// Fonction de nettoyage automatique
+async function performStartupCleanup() {
+    try {
+        console.log('🧹 Nettoyage automatique au démarrage...');
+        
+        // Nettoyer les sessions expirées
+        const { executeQuery } = require('./config/database');
+        const cleanupSessionsQuery = `
+            DELETE FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABSESSIONS_OPERATEURS]
+            WHERE DateCreation < DATEADD(hour, -24, GETDATE())
+        `;
+        await executeQuery(cleanupSessionsQuery);
+        console.log('✅ Sessions expirées nettoyées');
+        
+        // Nettoyer les doublons d'opérations
+        const duplicatesQuery = `
+            WITH DuplicateEvents AS (
+                SELECT NoEnreg,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY OperatorCode, CodeLanctImprod, CAST(DateCreation AS DATE), Ident, Phase
+                           ORDER BY DateCreation ASC, NoEnreg ASC
+                       ) as rn
+                FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
+                WHERE OperatorCode IS NOT NULL 
+                    AND OperatorCode != ''
+                    AND OperatorCode != '0'
+            )
+            DELETE FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
+            WHERE NoEnreg IN (
+                SELECT NoEnreg FROM DuplicateEvents WHERE rn > 1
+            )
+        `;
+        await executeQuery(duplicatesQuery);
+        console.log('✅ Doublons d\'opérations nettoyés');
+        
+        console.log('✅ Nettoyage automatique terminé');
+    } catch (error) {
+        console.error('❌ Erreur lors du nettoyage automatique:', error);
+    }
+}
+
+// Fonction de nettoyage périodique (toutes les heures)
+function startPeriodicCleanup() {
+    setInterval(async () => {
+        try {
+            console.log('🧹 Nettoyage périodique...');
+            await performStartupCleanup();
+        } catch (error) {
+            console.error('❌ Erreur lors du nettoyage périodique:', error);
+        }
+    }, 60 * 60 * 1000); // Toutes les heures
+}
+
+if (shouldStartServer()) {
+    server = app.listen(PORT, async () => {
+        console.log(`🚀 Serveur SEDI Tablette démarré sur le port ${PORT}`);
+        console.log(`📊 Interface admin: http://localhost:${PORT}/api/admin`);
+        console.log(`🔍 Santé: http://localhost:${PORT}/api/health`);
+        
+        // Effectuer le nettoyage automatique au démarrage
+        await performStartupCleanup();
+        
+        // Démarrer le nettoyage périodique
+        startPeriodicCleanup();
+    });
+} else {
+    console.log('🧪 Mode test détecté - Serveur non démarré');
+}
 
 // Gestion propre de l'arrêt
 process.on('SIGTERM', () => {
     console.log('🛑 Arrêt du serveur...');
-    process.exit(0);
+    if (server) {
+        server.close(() => {
+            console.log('✅ Serveur fermé proprement');
+            process.exit(0);
+        });
+    } else {
+        process.exit(0);
+    }
 });
 
 process.on('SIGINT', () => {
     console.log('🛑 Arrêt du serveur...');
-    process.exit(0);
+    if (server) {
+        server.close(() => {
+            console.log('✅ Serveur fermé proprement');
+            process.exit(0);
+        });
+    } else {
+        process.exit(0);
+    }
 });
 
-module.exports = app;
+// Fonction pour fermer le serveur proprement (utile pour les tests)
+const closeServer = () => {
+    return new Promise((resolve) => {
+        if (server) {
+            server.close(() => {
+                console.log('✅ Serveur fermé proprement');
+                resolve();
+            });
+        } else {
+            resolve();
+        }
+    });
+};
+
+module.exports = { app, closeServer };

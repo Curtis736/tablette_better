@@ -1,14 +1,42 @@
 const sql = require('mssql');
 
+// Charger la configuration de production si disponible
+let productionConfig = null;
+try {
+    productionConfig = require('../config-production');
+} catch (error) {
+    console.log('📝 Configuration de production non trouvée, utilisation des variables d\'environnement');
+}
+
 // Configuration de la base de données SQL Server
 const config = {
-    server: process.env.DB_SERVER || 'SERVEURERP',
-    database: process.env.DB_DATABASE || 'SEDI_ERP',
-    user: process.env.DB_USER || 'QUALITE',
-    password: process.env.DB_PASSWORD || 'QUALITE',
+    server: productionConfig?.DB_SERVER || process.env.DB_SERVER || '192.168.1.26',
+    database: productionConfig?.DB_DATABASE || process.env.DB_DATABASE || 'SEDI_APP_INDEPENDANTE',
+    user: productionConfig?.DB_USER || process.env.DB_USER || 'QUALITE',
+    password: productionConfig?.DB_PASSWORD || process.env.DB_PASSWORD || 'QUALITE',
     options: {
-        encrypt: process.env.DB_ENCRYPT === 'true' || false,
-        trustServerCertificate: process.env.DB_TRUST_CERT === 'true' || true,
+        encrypt: productionConfig?.DB_ENCRYPT || process.env.DB_ENCRYPT === 'true' || false,
+        trustServerCertificate: productionConfig?.DB_TRUST_CERT || process.env.DB_TRUST_CERT === 'true' || true,
+        enableArithAbort: true,
+        requestTimeout: 30000,
+        connectionTimeout: 30000
+    },
+    pool: {
+        max: 10,
+        min: 0,
+        idleTimeoutMillis: 30000
+    }
+};
+
+// Configuration de la base ERP
+const erpConfig = {
+    server: productionConfig?.DB_ERP_SERVER || process.env.DB_ERP_SERVER || '192.168.1.26',
+    database: productionConfig?.DB_ERP_DATABASE || process.env.DB_ERP_DATABASE || 'SEDI_ERP',
+    user: productionConfig?.DB_ERP_USER || process.env.DB_ERP_USER || 'QUALITE',
+    password: productionConfig?.DB_ERP_PASSWORD || process.env.DB_ERP_PASSWORD || 'QUALITE',
+    options: {
+        encrypt: productionConfig?.DB_ERP_ENCRYPT || process.env.DB_ERP_ENCRYPT === 'true' || false,
+        trustServerCertificate: productionConfig?.DB_ERP_TRUST_CERT || process.env.DB_ERP_TRUST_CERT === 'true' || true,
         enableArithAbort: true,
         requestTimeout: 30000,
         connectionTimeout: 30000
@@ -22,33 +50,34 @@ const config = {
 
 // Pool de connexions
 let pool = null;
+let erpPool = null;
 
-// Fonction pour obtenir une connexion
-async function getConnection() {
+// Fonction pour obtenir une connexion ERP
+async function getErpConnection() {
     try {
-        if (!pool) {
+        if (!erpPool) {
             // En mode test, simuler une connexion réussie
             if (process.env.NODE_ENV === 'test') {
-                console.log('🧪 Mode test - Connexion simulée');
+                console.log('🧪 Mode test - Connexion ERP simulée');
                 return null; // Retourner null pour les tests
             }
-            pool = await sql.connect(config);
-            console.log(' Connexion à la base de données établie');
+            erpPool = await sql.connect(erpConfig);
+            console.log('🔗 Connexion à la base ERP établie');
         }
-        return pool;
+        return erpPool;
     } catch (error) {
-        console.error(' Erreur de connexion à la base de données:', error);
+        console.error('❌ Erreur de connexion à la base ERP:', error);
         throw error;
     }
 }
 
-// Fonction pour exécuter une requête
-async function executeQuery(query, params = {}) {
-    const pool = await getConnection();
+// Fonction pour exécuter une requête sur la base ERP
+async function executeErpQuery(query, params = {}) {
+    const pool = await getErpConnection();
     
     // En mode test, retourner des données simulées
     if (process.env.NODE_ENV === 'test') {
-        console.log('🧪 Mode test - Données simulées retournées');
+        console.log('🧪 Mode test - Données ERP simulées retournées');
         return []; // Retourner un tableau vide pour les tests
     }
     
@@ -63,7 +92,7 @@ async function executeQuery(query, params = {}) {
         const result = await request.query(query);
         return result.recordset;
     } catch (error) {
-        console.error(' Erreur lors de l\'exécution de la requête:', error);
+        console.error('❌ Erreur lors de l\'exécution de la requête ERP:', error);
         throw error;
     }
 }
@@ -137,8 +166,11 @@ sql.on('error', (err) => {
 
 module.exports = {
     config,
+    erpConfig,
     getConnection,
+    getErpConnection,
     executeQuery,
+    executeErpQuery,
     executeProcedure,
     executeNonQuery,
     closeConnection,

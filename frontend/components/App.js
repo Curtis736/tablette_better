@@ -1,7 +1,7 @@
 // Classe principale de l'application
-import OperateurInterface from './OperateurInterface.js?v=20251010-fixed';
-import AdminPage from './AdminPage.js?v=20251014-fixed-v4';
-import ApiService from '../services/ApiService.js?v=20251014-fixed-v3';
+import OperateurInterface from './OperateurInterface.js?v=20251021-cache-fixed';
+import AdminPage from './AdminPage.js?v=20251021-cache-fixed';
+import ApiService from '../services/ApiService.js?v=20251021-cache-fixed';
 import StorageService from '../services/StorageService.js?v=20251007-final';
 import notificationManager from '../utils/NotificationManager.js';
 
@@ -23,12 +23,31 @@ class App {
         this.setupEventListeners();
     }
 
-    initializeApp() {
+    async initializeApp() {
         // Vérifier si un opérateur est déjà connecté
         const savedOperator = this.storageService.getCurrentOperator();
         if (savedOperator) {
-            this.currentOperator = savedOperator;
-            this.showOperatorScreen();
+            try {
+                // Vérifier que l'opérateur est encore valide
+                console.log('🔍 Vérification de l\'opérateur sauvegardé:', savedOperator);
+                const validOperator = await this.apiService.getOperator(savedOperator.code || savedOperator.id);
+                
+                if (validOperator) {
+                    this.currentOperator = validOperator;
+                    this.showOperatorScreen();
+                    console.log('✅ Opérateur restauré:', validOperator.nom);
+                } else {
+                    // Opérateur invalide, nettoyer le cache
+                    this.storageService.clearCurrentOperator();
+                    this.showLoginScreen();
+                    console.log('❌ Opérateur invalide, retour à la connexion');
+                }
+            } catch (error) {
+                // Erreur de validation, nettoyer le cache
+                console.error('❌ Erreur lors de la validation de l\'opérateur:', error);
+                this.storageService.clearCurrentOperator();
+                this.showLoginScreen();
+            }
         } else {
             this.showLoginScreen();
         }
@@ -147,6 +166,15 @@ class App {
         document.getElementById('loginScreen').classList.add('active');
         document.getElementById('operatorCode').value = '';
         this.currentScreen = 'login';
+        
+        // Nettoyer les données de l'opérateur précédent
+        this.currentOperator = null;
+        this.operateurInterface = null;
+        
+        // Vider le cache local pour éviter les données persistantes
+        this.storageService.clearCurrentOperator();
+        this.storageService.clearAllCache();
+        console.log('🧹 Cache local vidé');
     }
 
     showOperatorScreen() {

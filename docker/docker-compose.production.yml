@@ -1,103 +1,33 @@
+version: '3.8'
+
 services:
-  # Backend API SEDI Tablette - Configuration Production
-  sedi-backend:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.backend
+  backend:
+    image: tablettev2-backend:latest
     container_name: sedi-tablette-backend
-    environment:
-      - NODE_ENV=production
-      - PORT=3001
-      - DB_SERVER=192.168.1.14
-      - DB_DATABASE=SEDI_ERP
-      - DB_USER=QUALITE
-      - DB_PASSWORD=QUALITE
-      - DB_ENCRYPT=false
-      - DB_TRUST_CERT=true
-      - FRONTEND_URL=http://192.168.1.26:8080
-      - CORS_ORIGIN=http://192.168.1.26:8080
-      - CORS_CREDENTIALS=true
-      - API_TIMEOUT=30000
-      - API_RETRY_ATTEMPTS=3
-      - CACHE_ENABLED=true
-      - CACHE_TTL=300000
-      - LOG_LEVEL=info
-      - JWT_SECRET=change-me-in-production
-      - SESSION_SECRET=change-me-in-production
-      # Configuration Email
-      - EMAIL_DISABLED=false
-      - EMAIL_USE_HTTP=true
-      - EMAIL_WEBHOOK_URL=http://192.168.1.14:8080/api/email-webhook
-      - EMAIL_FALLBACK_SERVICE=log
-      - SMTP_HOST=smtp.gmail.com
-      - SMTP_PORT=587
-      - SMTP_USER=boutard@sedi-ati.com
-      - SMTP_PASS=your-email-password
     ports:
       - "3001:3001"
-    networks:
-      - sedi-tablette-network
-    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
     volumes:
-      - sedi-tablette-logs:/app/logs:rw
-      - /etc/localtime:/etc/localtime:ro
-    labels:
-      - "com.sedi.service=backend"
-      - "com.sedi.version=2.2"
-      - "com.sedi.description=SEDI Tablette Backend API with Pause Management"
+      - ../backend/config-production.js:/app/config-production.js:ro
+      - ../backend/logs:/app/logs
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
-    user: node
-    working_dir: /app
 
-  # Frontend Nginx SEDI Tablette - Configuration Production
-  sedi-frontend:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.frontend
+  frontend:
+    image: tablettev2-frontend:latest
     container_name: sedi-tablette-frontend
     ports:
       - "8080:80"
     depends_on:
-      sedi-backend:
-        condition: service_healthy
-    networks:
-      - sedi-tablette-network
+      - backend
     restart: unless-stopped
-    volumes:
-      - sedi-tablette-logs:/var/log/nginx:rw
-      - /etc/localtime:/etc/localtime:ro
-    labels:
-      - "com.sedi.service=frontend"
-      - "com.sedi.version=2.2"
-      - "com.sedi.description=SEDI Tablette Frontend with Pause Management"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
-    environment:
-      - NGINX_VERSION=1.25.5
-      - NGINX_WORKER_PROCESSES=auto
-      - NGINX_WORKER_CONNECTIONS=1024
-      - NGINX_KEEPALIVE_TIMEOUT=65
-
-networks:
-  sedi-tablette-network:
-    name: sedi-tablette-network
-    driver: bridge
-    labels:
-      - "com.sedi.network=main"
-
-volumes:
-  sedi-tablette-logs:
-    name: sedi-tablette-logs
-    driver: local
-    labels:
-      - "com.sedi.volume=logs"
-      - "com.sedi.description=Logs centralisés pour SEDI Tablette"

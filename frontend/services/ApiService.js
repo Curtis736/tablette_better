@@ -5,15 +5,14 @@ class ApiService {
         const currentPort = window.location.port;
         const currentHost = window.location.hostname;
         
-        // Si on est en production (sans port ou port 80/443), utiliser le proxy Nginx
-        if (!currentPort || currentPort === '80' || currentPort === '443') {
-            // Environnement de production - utiliser le proxy Nginx
-            this.baseUrl = `${window.location.protocol}//${window.location.host}/api`;
-        } else if (currentPort === '8080' && currentHost === 'localhost') {
-            // Environnement de développement local - frontend sur 8080, backend sur 3001
+        // Détection de l'environnement - FORCER LOCALHOST EN DÉVELOPPEMENT
+        const isLocalDev = (currentHost === 'localhost' || currentHost === '127.0.0.1' || currentHost.startsWith('172.')) && currentPort === '8080';
+        
+        if (isLocalDev) {
+            // Environnement de développement local - connexion directe au backend
             this.baseUrl = `http://localhost:3001/api`;
         } else {
-            // Environnement de production avec port 8080 - utiliser le proxy Nginx
+            // Environnement de production - utiliser le proxy Nginx
             this.baseUrl = `${window.location.protocol}//${window.location.host}/api`;
         }
         
@@ -28,6 +27,7 @@ class ApiService {
         this.minRequestInterval = 100; // 100ms minimum entre les requêtes
         
         console.log(`🔗 ApiService configuré pour: ${this.baseUrl}`);
+        console.log(`🔍 Host détecté: ${currentHost}:${currentPort}`);
     }
 
     // Méthode générique pour les requêtes avec rate limiting

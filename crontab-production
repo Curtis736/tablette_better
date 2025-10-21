@@ -1,0 +1,11 @@
+# Maintenance quotidienne - Nettoyage des données incohérentes
+0 2 * * * docker exec sedi-tablette-backend node scripts/maintenance.js cleanup >> /var/log/sedi-maintenance.log 2>&1
+
+# Rapport de santé hebdomadaire
+0 8 * * 1 docker exec sedi-tablette-backend node scripts/maintenance.js report >> /var/log/sedi-health.log 2>&1
+
+# Validation de l'intégrité des données toutes les 6 heures
+0 */6 * * * docker exec sedi-tablette-backend node scripts/maintenance.js validate >> /var/log/sedi-validation.log 2>&1
+
+# Nettoyage des logs anciens (plus de 30 jours)
+0 3 * * * find /var/log/sedi-*.log -mtime +30 -delete

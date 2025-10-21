@@ -140,12 +140,9 @@ class OperateurInterface {
             }
         });
         
-        // Auto-vérification du LT après 1 seconde d'inactivité
+        // Gestion de la saisie du code de lancement
         this.lancementInput.addEventListener('input', () => {
-            clearTimeout(this.autoValidationTimeout);
-            this.autoValidationTimeout = setTimeout(() => {
-                this.autoValidateLancement();
-            }, 1000);
+            this.handleLancementInput();
         });
         
         // Contrôles de lancement
@@ -178,6 +175,11 @@ class OperateurInterface {
                 this.startBtn.disabled = false;
                 this.startBtn.innerHTML = '<i class="fas fa-play"></i> Démarrer';
             }
+            
+            // Valider automatiquement le lancement si le code est complet (LT + 7 chiffres)
+            if (code.length === 10 && code.startsWith('LT')) {
+                this.validateAndSelectLancement();
+            }
         } else {
             // Cacher les contrôles si le champ est vide
             if (!this.isRunning) {
@@ -186,66 +188,6 @@ class OperateurInterface {
         }
     }
 
-    // Auto-vérification du lancement après 1 seconde d'inactivité
-    async autoValidateLancement() {
-        const code = this.lancementInput.value.trim();
-        
-        // Vérifier si le code est valide (au moins 3 caractères après "LT")
-        if (code.length >= 3 && code.startsWith('LT')) {
-            try {
-                // Afficher un indicateur de chargement
-                this.lancementDetails.innerHTML = `
-                    <strong>Code: ${code}</strong><br>
-                    <span class="status-badge status-loading">
-                        <i class="fas fa-spinner fa-spin"></i> Vérification...
-                    </span>
-                `;
-                
-                // Simuler une vérification (vous pouvez remplacer par un vrai appel API)
-                await this.validateLancementCode(code);
-                
-                // Si la validation réussit, afficher le succès
-                this.lancementDetails.innerHTML = `
-                    <strong>Code: ${code}</strong><br>
-                    <span class="status-badge status-success">
-                        <i class="fas fa-check"></i> Code validé
-                    </span>
-                `;
-                
-                // Activer le bouton démarrer
-                this.startBtn.disabled = false;
-                this.startBtn.innerHTML = '<i class="fas fa-play"></i> Démarrer';
-                
-            } catch (error) {
-                // Si la validation échoue, afficher l'erreur
-                this.lancementDetails.innerHTML = `
-                    <strong>Code: ${code}</strong><br>
-                    <span class="status-badge status-error">
-                        <i class="fas fa-times"></i> Code invalide
-                    </span>
-                `;
-                
-                // Désactiver le bouton démarrer
-                this.startBtn.disabled = true;
-                this.startBtn.innerHTML = '<i class="fas fa-play"></i> Démarrer';
-            }
-        }
-    }
-
-    // Méthode pour valider le code de lancement
-    async validateLancementCode(code) {
-        // Simulation d'une validation (remplacer par un vrai appel API)
-        return new Promise((resolve, reject) => {
-            setTimeout(() => {
-                // Simuler une validation basée sur la longueur du code
-                if (code.length >= 5) {
-                    resolve(true);
-                } else {
-                    reject(new Error('Code trop court'));
-                }
-            }, 500);
-        });
-    }
 
     async validateAndSelectLancement() {
         const code = this.lancementInput.value.trim();
@@ -316,7 +258,9 @@ class OperateurInterface {
 
     async checkCurrentOperation() {
         try {
-            const currentOp = await this.apiService.getCurrentOperation(this.operator.id);
+            const operatorCode = this.operator.code || this.operator.id;
+            console.log(`🔍 Vérification opération en cours pour opérateur: ${operatorCode}`);
+            const currentOp = await this.apiService.getCurrentOperation(operatorCode);
             
             if (currentOp && currentOp.CodeLancement) {
                 // Il y a une opération en cours
@@ -383,20 +327,16 @@ class OperateurInterface {
             return;
         }
 
-        // Vérifier qu'un lancement valide a été sélectionné
-        if (!this.currentLancement || this.currentLancement.CodeLancement !== code) {
-            this.notificationManager.error('Veuillez d\'abord valider le code de lancement (appuyez sur Entrée)');
-            return;
-        }
-
         try {
+            const operatorCode = this.operator.code || this.operator.id;
+            
             if (this.isPaused) {
                 // Reprendre l'opération en pause
-                await this.apiService.resumeOperation(this.operator.id, code);
+                await this.apiService.resumeOperation(operatorCode, code);
                 this.notificationManager.success('Opération reprise');
             } else {
                 // Démarrer nouvelle opération
-                await this.apiService.startOperation(this.operator.id, code);
+                await this.apiService.startOperation(operatorCode, code);
                 this.notificationManager.success('Opération démarrée');
             }
             
@@ -424,7 +364,8 @@ class OperateurInterface {
         if (!this.canPerformAction()) return;
         
         try {
-            await this.apiService.pauseOperation(this.operator.id, this.currentLancement.CodeLancement);
+            const operatorCode = this.operator.code || this.operator.id;
+            await this.apiService.pauseOperation(operatorCode, this.currentLancement.CodeLancement);
             
             this.pauseTimer();
             this.startBtn.disabled = false;
@@ -452,7 +393,8 @@ class OperateurInterface {
             // Définir l'heure de fin avant d'arrêter
             this.setFinalEndTime();
             
-            const result = await this.apiService.stopOperation(this.operator.id, this.currentLancement.CodeLancement);
+            const operatorCode = this.operator.code || this.operator.id;
+            const result = await this.apiService.stopOperation(operatorCode, this.currentLancement.CodeLancement);
             
             this.stopTimer();
             this.resetControls();
@@ -593,9 +535,16 @@ class OperateurInterface {
             this.operatorHistoryTableBody.innerHTML = '<tr><td colspan="6" class="no-data">Chargement en cours...</td></tr>';
             
             // Vérifier les propriétés de l'opérateur
+            console.log('=== DEBUG OPÉRATEUR ===');
             console.log('Opérateur complet:', this.operator);
+            console.log('Opérateur.id:', this.operator.id);
+            console.log('Opérateur.code:', this.operator.code);
+            console.log('Opérateur.coderessource:', this.operator.coderessource);
+            console.log('Opérateur.nom:', this.operator.nom);
+            
             const operatorCode = this.operator.code || this.operator.coderessource || this.operator.id;
-            console.log('Code opérateur utilisé:', operatorCode);
+            console.log('Code opérateur utilisé pour l\'API:', operatorCode);
+            console.log('=== FIN DEBUG OPÉRATEUR ===');
             
             if (!operatorCode) {
                 console.error('❌ Aucun code opérateur trouvé');
