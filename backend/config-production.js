@@ -5,7 +5,7 @@ module.exports = {
     FRONTEND_URL: 'http://192.168.1.26:8080',
 
     // Configuration de la base de données SQL Server
-    DB_SERVER: '192.168.1.26',
+    DB_SERVER: '192.168.1.14',
     DB_DATABASE: 'SEDI_APP_INDEPENDANTE',
     DB_USER: 'QUALITE',
     DB_PASSWORD: 'QUALITE',
@@ -13,7 +13,7 @@ module.exports = {
     DB_TRUST_CERT: true,
 
     // Configuration de la base ERP (pour les données de référence)
-    DB_ERP_SERVER: '192.168.1.26',
+    DB_ERP_SERVER: '192.168.1.14',
     DB_ERP_DATABASE: 'SEDI_ERP',
     DB_ERP_USER: 'QUALITE',
     DB_ERP_PASSWORD: 'QUALITE',
