@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   backend:
-    image: tablettev2-backend:latest
+    image: docker-sedi-backend:latest
     container_name: sedi-tablette-backend
     ports:
       - "3001:3001"
@@ -19,7 +19,7 @@ services:
       retries: 3
 
   frontend:
-    image: tablettev2-frontend:latest
+    image: docker-sedi-frontend:latest
     container_name: sedi-tablette-frontend
     ports:
       - "8080:80"

@@ -170,13 +170,28 @@ router.post('/', async (req, res) => {
             codeArticle, 
             designation, 
             quantite, 
-            priorite = 'NORMALE' 
+            priorite = 'NORMALE',
+            operatorId  // OBLIGATOIRE : opérateur qui crée le lancement
         } = req.body;
         
         // Vérifier que tous les champs requis sont présents
-        if (!codeLancement || !codeArticle || !designation) {
+        if (!codeLancement || !codeArticle || !designation || !operatorId) {
             return res.status(400).json({ 
-                error: 'Code lancement, code article et désignation sont requis' 
+                error: 'Code lancement, code article, désignation et opérateur sont requis' 
+            });
+        }
+
+        // Vérifier que l'opérateur existe
+        const operatorQuery = `
+            SELECT TOP 1 Coderessource, Designation1
+            FROM [SEDI_ERP].[dbo].[RESSOURC]
+            WHERE Coderessource = @operatorId
+        `;
+        const operatorResult = await executeQuery(operatorQuery, { operatorId });
+        
+        if (operatorResult.length === 0) {
+            return res.status(400).json({ 
+                error: 'Opérateur non trouvé' 
             });
         }
         

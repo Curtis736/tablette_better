@@ -6,6 +6,8 @@ const TimeUtils = require('../utils/timeUtils');
 const { authenticateOperator } = require('../middleware/auth');
 const dataIsolation = require('../middleware/dataIsolation');
 const secureQuery = require('../services/SecureQueryService');
+const { validateOperatorSession, validateDataOwnership, logSecurityAction } = require('../middleware/operatorSecurity');
+const dataValidation = require('../services/DataValidationService');
 
 // Fonction de nettoyage des données incohérentes
 async function cleanupInconsistentData(operatorId) {
@@ -508,6 +510,27 @@ router.post('/start', async (req, res) => {
             });
         }
         
+        // 🔒 Sécurité validée par le middleware validateOperatorSession
+        
+        // 🔍 VALIDATION SIMPLIFIÉE : Vérifier seulement que l'opérateur existe
+        const operatorCheckQuery = `
+            SELECT TOP 1 Coderessource, Designation1, Typeressource
+            FROM [SEDI_ERP].[dbo].[RESSOURC]
+            WHERE Coderessource = @operatorId
+        `;
+        
+        const operatorResult = await executeQuery(operatorCheckQuery, { operatorId });
+        
+        if (operatorResult.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Opérateur non trouvé dans la base de données',
+                security: 'OPERATOR_NOT_FOUND'
+            });
+        }
+        
+        console.log(`✅ Opérateur validé: ${operatorId} (${operatorResult[0].Designation1})`);
+        
         // Obtenir l'heure française actuelle
         const { time: currentTime, date: currentDate } = TimeUtils.getCurrentDateTime();
         
@@ -521,25 +544,57 @@ router.post('/start', async (req, res) => {
                 error: validation.error
             });
         }
+
+        // Vérifier si le lancement est déjà en cours par un autre opérateur
+        try {
+            const conflictQuery = `
+                SELECT TOP 1 OperatorCode, Statut, DateCreation
+                FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
+                WHERE CodeLanctImprod = @lancementCode
+                AND Statut IN ('EN_COURS', 'EN_PAUSE')
+                AND CAST(DateCreation AS DATE) = CAST(GETDATE() AS DATE)
+                AND OperatorCode != @operatorId
+            `;
+            const conflictResult = await executeQuery(conflictQuery, { lancementCode, operatorId });
+            
+            if (conflictResult.length > 0) {
+                return res.status(409).json({
+                    success: false,
+                    error: `Le lancement ${lancementCode} est déjà en cours par l'opérateur ${conflictResult[0].OperatorCode}`,
+                    conflict: {
+                        operatorCode: conflictResult[0].OperatorCode,
+                        status: conflictResult[0].Statut,
+                        startTime: conflictResult[0].DateCreation
+                    }
+                });
+            }
+        } catch (error) {
+            console.log('⚠️ Erreur vérification conflit:', error.message);
+        }
         
         // Enregistrer l'événement DEBUT dans ABHISTORIQUE_OPERATEURS avec l'heure française
         const insertQuery = `
             INSERT INTO [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
             (OperatorCode, CodeLanctImprod, CodeRubrique, Ident, Phase, Statut, HeureDebut, HeureFin, DateCreation)
             VALUES (
-                '${operatorId}',
-                '${lancementCode}',
+                @operatorId,
+                @lancementCode,
                 'PRODUCTION',
                 'DEBUT',
                 'PRODUCTION',
                 'EN_COURS',
-                CAST('${currentTime}' AS TIME),
+                CAST(@currentTime AS TIME),
                 NULL,
-                CAST('${currentDate}' AS DATE)
+                CAST(@currentDate AS DATE)
             )
         `;
         
-        await executeQuery(insertQuery);
+        await executeQuery(insertQuery, { 
+            operatorId, 
+            lancementCode, 
+            currentTime, 
+            currentDate 
+        });
         
         console.log(`✅ Lancement ${lancementCode} démarré par opérateur ${operatorId}`);
         

@@ -10,7 +10,7 @@ class ApiService {
         
         if (isLocalDev) {
             // Environnement de développement local - connexion directe au backend
-            this.baseUrl = `http://localhost:3001/api`;
+            this.baseUrl = `http://localhost:3033/api`;
         } else {
             // Environnement de production - utiliser le proxy Nginx
             this.baseUrl = `${window.location.protocol}//${window.location.host}/api`;

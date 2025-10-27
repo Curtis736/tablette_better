@@ -135,11 +135,17 @@ class AdminPage {
         }, 300);
         
         // Actualisation automatique avec retry en cas d'erreur
+        // Auto-refresh plus fréquent pour les mises à jour temps réel
         this.refreshInterval = setInterval(() => {
             if (!this.isLoading) {
                 this.loadDataWithRetry();
             }
-        }, 60000);
+        }, 10000); // Toutes les 10 secondes au lieu de 60
+
+        // Mise à jour temps réel des opérateurs connectés
+        this.operatorsInterval = setInterval(() => {
+            this.updateOperatorsStatus();
+        }, 5000); // Toutes les 5 secondes
     }
 
     async loadData() {
@@ -358,7 +364,7 @@ class AdminPage {
             const option = document.createElement('option');
             option.value = operator.code;
             
-            // Indicateur visuel pour les opérateurs mal associés
+            // Indicateur visuel pour les opérateurs mal associés et actifs
             let statusIcon = '';
             if (operator.isProperlyLinked === false) {
                 statusIcon = ' ⚠️';
@@ -366,13 +372,55 @@ class AdminPage {
                 statusIcon = ' ✅';
             }
             
+            // Indicateur d'activité
+            if (operator.isActive) {
+                statusIcon = ' 🟢' + statusIcon;
+                option.style.fontWeight = 'bold';
+                option.style.color = '#28a745';
+            }
+            
             option.textContent = `${operator.name} (${operator.code})${statusIcon}`;
-            option.title = `Code: ${operator.code} | Ressource: ${operator.resourceCode || 'N/A'} | IP: ${operator.ipAddress || 'N/A'}`;
+            option.title = `Code: ${operator.code} | Ressource: ${operator.resourceCode || 'N/A'} | Statut: ${operator.currentStatus || 'N/A'}`;
             
             this.operatorSelect.appendChild(option);
         });
         
         console.log('✅ Menu déroulant mis à jour avec', operators.length, 'opérateurs');
+    }
+
+    // Nouvelle méthode pour mettre à jour le statut des opérateurs
+    async updateOperatorsStatus() {
+        try {
+            const response = await this.apiService.getConnectedOperators();
+            if (response.success && response.operators) {
+                this.updateOperatorSelect(response.operators);
+                
+                // Mettre à jour l'affichage des opérateurs actifs
+                this.updateActiveOperatorsDisplay(response.operators);
+            }
+        } catch (error) {
+            console.error('Erreur lors de la mise à jour du statut des opérateurs:', error);
+        }
+    }
+
+    // Afficher les opérateurs actifs
+    updateActiveOperatorsDisplay(operators) {
+        const activeOperators = operators.filter(op => op.isActive);
+        
+        // Mettre à jour un indicateur visuel des opérateurs actifs
+        const activeIndicator = document.getElementById('activeOperatorsIndicator');
+        if (activeIndicator) {
+            activeIndicator.innerHTML = `
+                <span class="badge badge-success">
+                    ${activeOperators.length} opérateur(s) en opération
+                </span>
+            `;
+        }
+        
+        // Log pour debug
+        if (activeOperators.length > 0) {
+            console.log('🟢 Opérateurs actifs:', activeOperators.map(op => op.code).join(', '));
+        }
     }
 
     async handleOperatorChange() {
@@ -1043,6 +1091,25 @@ class AdminPage {
             </div>
         `;
         
+        // Statut (index 5)
+        const statusCell = cells[5];
+        const currentStatus = operation.statusCode || 'EN_COURS';
+        const originalStatus = currentStatus;
+        statusCell.innerHTML = `
+            <div class="status-input-container">
+                <select data-id="${id}" 
+                        data-field="status"
+                        data-original="${originalStatus}"
+                        class="status-select">
+                    <option value="EN_COURS" ${currentStatus === 'EN_COURS' ? 'selected' : ''}>En cours</option>
+                    <option value="EN_PAUSE" ${currentStatus === 'EN_PAUSE' ? 'selected' : ''}>En pause</option>
+                    <option value="TERMINE" ${currentStatus === 'TERMINE' ? 'selected' : ''}>Terminé</option>
+                    <option value="PAUSE_TERMINEE" ${currentStatus === 'PAUSE_TERMINEE' ? 'selected' : ''}>Pause terminée</option>
+                    <option value="FORCE_STOP" ${currentStatus === 'FORCE_STOP' ? 'selected' : ''}>Arrêt forcé</option>
+                </select>
+            </div>
+        `;
+        
         // Actions (index 6)
         const actionsCell = cells[6];
         actionsCell.innerHTML = `
@@ -1087,6 +1154,21 @@ class AdminPage {
                 }
             });
         });
+        
+        // Event listener pour le select de statut
+        const statusSelect = row.querySelector('.status-select');
+        if (statusSelect) {
+            const originalStatus = statusSelect.getAttribute('data-original');
+            
+            statusSelect.addEventListener('change', () => {
+                const currentStatus = statusSelect.value;
+                console.log(`🔍 Changement de statut détecté:`, {
+                    original: originalStatus,
+                    current: currentStatus,
+                    changed: currentStatus !== originalStatus
+                });
+            });
+        }
     }
 
     cancelEdit(id) {
@@ -1178,12 +1260,15 @@ class AdminPage {
             const endTimeInput = row.querySelector('input[data-field="endTime"]') || 
                                row.querySelector('input[data-id="' + id + '"][data-field="endTime"]') ||
                                row.querySelector('.time-input[data-field="endTime"]');
+            const statusSelect = row.querySelector('select[data-field="status"]') ||
+                               row.querySelector('.status-select[data-field="status"]');
 
             console.log('🔍 Recherche des inputs:', {
                 id,
                 rowFound: !!row,
                 startTimeInputFound: !!startTimeInput,
                 endTimeInputFound: !!endTimeInput,
+                statusSelectFound: !!statusSelect,
                 rowHTML: row.innerHTML.substring(0, 200) + '...'
             });
 
@@ -1194,10 +1279,16 @@ class AdminPage {
                 this.updateOperationsTable();
                 return;
             }
+            
+            // Le statut est optionnel (peut ne pas être en mode édition)
+            if (!statusSelect) {
+                console.log('ℹ️ Aucun select de statut trouvé - mode édition partielle');
+            }
 
             // Récupérer les valeurs originales
             const originalStartTime = startTimeInput.getAttribute('data-original');
             const originalEndTime = endTimeInput.getAttribute('data-original');
+            const originalStatus = statusSelect ? statusSelect.getAttribute('data-original') : null;
             
             // Validation des heures
             const startTime = startTimeInput.value;

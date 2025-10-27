@@ -108,3 +108,41 @@ test-reports/
 # Build outputs
 dist/
 build/
+
+# Scripts de déploiement temporaires
+sync-to-server.sh
+sync-from-server.sh
+deploy-on-server.sh
+fix-docker-ports.sh
+deploy-direct-production.sh
+deploy-direct-production.ps1
+start-local.sh
+
+# Fichiers temporaires de développement
+*.tmp
+*.temp
+.cache/
+
+# Fichiers de production avec secrets
+config-production.js
+backend/config-production.js
+
+# Rapports ESLint
+eslint-report.json
+backend/eslint-report.json
+
+# SonarQube
+.sonar/
+sonar-project.properties
+
+# Fichiers de test
+test-association.sh
+test-*.js
+backend/test-*.js
+
+# Scripts de maintenance
+scripts/maintenance.js
+backend/scripts/maintenance.js
+
+# Crontab
+crontab-*

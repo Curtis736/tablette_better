@@ -3,6 +3,8 @@ const { executeQuery } = require('../config/database');
 const moment = require('moment');
 const router = express.Router();
 const { authenticateAdmin } = require('../middleware/auth');
+const dataValidation = require('../services/DataValidationService');
+const { getConcurrencyStats } = require('../middleware/concurrencyManager');
 
 // Fonction pour valider et récupérer les informations d'un lancement depuis LCTE
 async function validateLancement(codeLancement) {
@@ -788,6 +790,29 @@ router.get('/stats', async (req, res) => {
     }
 });
 
+// GET /api/admin/concurrency-stats - Statistiques de concurrence
+router.get('/concurrency-stats', (req, res) => {
+    try {
+        const stats = getConcurrencyStats();
+        res.json({
+            success: true,
+            timestamp: new Date().toISOString(),
+            concurrency: stats,
+            recommendations: {
+                maxConcurrentConnections: 20,
+                currentLoad: `${stats.totalActiveOperations}/20`,
+                status: stats.totalActiveOperations > 15 ? 'HIGH_LOAD' : 'NORMAL'
+            }
+        });
+    } catch (error) {
+        console.error('❌ Erreur récupération stats concurrence:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Erreur lors de la récupération des statistiques de concurrence'
+        });
+    }
+});
+
 // GET /api/admin/export/:format - Exporter les données
 router.get('/export/:format', async (req, res) => {
     try {
@@ -824,11 +849,26 @@ router.get('/export/:format', async (req, res) => {
 // Fonction pour récupérer les statistiques avec les vraies tables
 async function getAdminStats(date) {
     try {
-        // Compter les opérateurs connectés depuis ABSESSIONS_OPERATEURS
+        // Compter les opérateurs actifs (connectés OU avec lancement en cours)
         const operatorsQuery = `
-            SELECT COUNT(DISTINCT OperatorCode) as totalOperators
-            FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABSESSIONS_OPERATEURS]
-            WHERE SessionStatus = 'ACTIVE'
+            SELECT COUNT(DISTINCT COALESCE(s.OperatorCode, h.OperatorCode)) as totalOperators
+            FROM (
+                -- Opérateurs connectés
+                SELECT OperatorCode
+                FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABSESSIONS_OPERATEURS]
+                WHERE SessionStatus = 'ACTIVE'
+                
+                UNION
+                
+                -- Opérateurs avec lancement en cours aujourd'hui
+                SELECT DISTINCT OperatorCode
+                FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
+                WHERE Statut IN ('EN_COURS', 'EN_PAUSE')
+                AND CAST(DateCreation AS DATE) = CAST(GETDATE() AS DATE)
+                AND OperatorCode IS NOT NULL
+                AND OperatorCode != ''
+                AND OperatorCode != '0'
+            ) active_operators
         `;
         
         // Récupérer tous les événements depuis ABHISTORIQUE_OPERATEURS
@@ -875,45 +915,22 @@ async function getAdminStats(date) {
 // Fonction pour récupérer les opérations basées sur les événements ABHISTORIQUE_OPERATEURS
 async function getAdminOperations(date, page = 1, limit = 25) {
     try {
-        console.log('🚀 DEBUT getAdminOperations - date:', date, 'page:', page, 'limit:', limit);
-        console.log('🔍 Récupération des événements depuis ABHISTORIQUE_OPERATEURS...');
-
-        // Récupérer tous les événements depuis ABHISTORIQUE_OPERATEURS
-        const eventsQuery = `
-        SELECT 
-                h.NoEnreg,
-                h.Ident,
-                h.CodeLanctImprod,
-                h.Phase,
-                h.OperatorCode,
-                h.CodeRubrique,
-                h.Statut,
-                h.HeureDebut,
-                h.HeureFin,
-                h.DateCreation,
-                COALESCE(r.Designation1, 'Opérateur ' + h.OperatorCode) as operatorName,
-                r.Coderessource as resourceCode,
-                l.DesignationLct1 as Article,
-                l.DesignationLct2 as ArticleDetail,
-                -- Validation de l'association opérateur-ressource
-                CASE 
-                    WHEN r.Coderessource = h.OperatorCode THEN 'LINKED'
-                    WHEN r.Coderessource IS NULL THEN 'NO_RESOURCE'
-                    ELSE 'MISMATCH'
-                END as operatorLinkStatus
-            FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS] h
-            LEFT JOIN [SEDI_ERP].[dbo].[RESSOURC] r ON h.OperatorCode = r.Coderessource
-            LEFT JOIN [SEDI_ERP].[dbo].[LCTE] l ON l.CodeLancement = h.CodeLanctImprod
-            WHERE h.OperatorCode IS NOT NULL 
-                AND h.OperatorCode != ''
-                AND h.OperatorCode != '0'
-            ORDER BY h.DateCreation DESC
-        `;
-    
-        console.log('Exécution de la requête événements...');
-        const allEvents = await executeQuery(eventsQuery);
-
-        console.log('Résultats:', allEvents.length, 'événements trouvés');
+        console.log('🚀 DEBUT getAdminOperations SÉCURISÉ - date:', date, 'page:', page, 'limit:', limit);
+        
+        // Utiliser le service de validation pour éviter les mélanges de données
+        const validationResult = await dataValidation.getAdminDataSecurely();
+        
+        if (!validationResult.valid) {
+            console.error('❌ Erreur de validation des données:', validationResult.error);
+            return { operations: [], pagination: null, error: validationResult.error };
+        }
+        
+        const allEvents = validationResult.events;
+        console.log('Résultats sécurisés:', allEvents.length, 'événements valides trouvés');
+        
+        if (validationResult.invalidEvents.length > 0) {
+            console.log(`🚨 ${validationResult.invalidEvents.length} événements avec associations invalides ignorés`);
+        }
         
         // DIAGNOSTIC : Vérifier les événements pour LT2501136
         const diagnosticEvents = allEvents.filter(e => e.CodeLanctImprod === 'LT2501136');
@@ -1015,7 +1032,7 @@ router.put('/operations/:id', async (req, res) => {
         const updateFields = [];
         const params = { id: parseInt(id) };
         
-        // Seules les heures sont modifiables
+        // Heures et statut sont modifiables
         if (startTime !== undefined) {
             const formattedStartTime = formatTimeForSQL(startTime);
             if (!formattedStartTime) {
@@ -1042,6 +1059,20 @@ router.put('/operations/:id', async (req, res) => {
             console.log(`🔧 endTime: ${endTime} -> ${params.endTime}`);
         }
         
+        // Modification du statut
+        if (req.body.status !== undefined) {
+            const validStatuses = ['EN_COURS', 'EN_PAUSE', 'TERMINE', 'PAUSE_TERMINEE', 'FORCE_STOP'];
+            if (!validStatuses.includes(req.body.status)) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Statut invalide. Statuts autorisés: ${validStatuses.join(', ')}`
+                });
+            }
+            updateFields.push('Statut = @status');
+            params.status = req.body.status;
+            console.log(`🔧 status: ${req.body.status}`);
+        }
+        
         // Validation de cohérence des heures
         if (params.startTime && params.endTime) {
             const startMinutes = timeToMinutes(params.startTime);
@@ -1053,9 +1084,9 @@ router.put('/operations/:id', async (req, res) => {
             }
         }
         
-        // Ignorer les autres champs
+        // Ignorer les autres champs non modifiables
         if (operatorName !== undefined || lancementCode !== undefined || article !== undefined) {
-            console.log('⚠️ Seules les heures peuvent être modifiées');
+            console.log('⚠️ Seules les heures et le statut peuvent être modifiés');
         }
         
         if (updateFields.length === 0) {
@@ -1228,19 +1259,49 @@ router.get('/operators', async (req, res) => {
     try {
         console.log('🔍 Récupération des opérateurs connectés depuis ABSESSIONS_OPERATEURS...');
 
-        const operatorsQuery = `
-            SELECT DISTINCT 
-                s.OperatorCode,
-                COALESCE(r.Designation1, 'Opérateur ' + s.OperatorCode) as NomOperateur,
-                s.LoginTime,
-                s.SessionStatus,
-                r.Coderessource as RessourceCode,
-                s.DeviceInfo
-            FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABSESSIONS_OPERATEURS] s
-            LEFT JOIN [SEDI_ERP].[dbo].[RESSOURC] r ON s.OperatorCode = r.Coderessource
-            WHERE s.SessionStatus = 'ACTIVE'
-            ORDER BY s.OperatorCode
-        `;
+            const operatorsQuery = `
+                SELECT DISTINCT 
+                    COALESCE(s.OperatorCode, h.OperatorCode) as OperatorCode,
+                    COALESCE(r.Designation1, 'Opérateur ' + COALESCE(s.OperatorCode, h.OperatorCode)) as NomOperateur,
+                    s.LoginTime,
+                    COALESCE(s.SessionStatus, 'ACTIVE') as SessionStatus,
+                    CASE 
+                        WHEN h.OperatorCode IS NOT NULL THEN 'EN_OPERATION'
+                        WHEN s.OperatorCode IS NOT NULL THEN 'CONNECTE'
+                        ELSE 'INACTIVE'
+                    END as ActivityStatus,
+                    COALESCE(s.LoginTime, h.DateCreation) as LastActivityTime,
+                    r.Coderessource as RessourceCode,
+                    s.DeviceInfo,
+                    CASE 
+                        WHEN h.OperatorCode IS NOT NULL THEN 'EN_OPERATION'
+                        WHEN s.OperatorCode IS NOT NULL THEN 'CONNECTE'
+                        ELSE 'INACTIVE'
+                    END as CurrentStatus
+                FROM (
+                    -- Opérateurs connectés
+                    SELECT s.OperatorCode, s.LoginTime, s.SessionStatus, s.DeviceInfo
+                    FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABSESSIONS_OPERATEURS] s
+                    WHERE s.SessionStatus = 'ACTIVE'
+                    
+                    UNION
+                    
+                    -- Opérateurs avec lancement en cours
+                    SELECT DISTINCT h.OperatorCode, h.DateCreation as LoginTime, 'ACTIVE' as SessionStatus, NULL as DeviceInfo
+                    FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS] h
+                    WHERE h.Statut IN ('EN_COURS', 'EN_PAUSE')
+                    AND CAST(h.DateCreation AS DATE) = CAST(GETDATE() AS DATE)
+                    AND h.OperatorCode IS NOT NULL
+                    AND h.OperatorCode != ''
+                    AND h.OperatorCode != '0'
+                ) all_operators
+                LEFT JOIN [SEDI_APP_INDEPENDANTE].[dbo].[ABSESSIONS_OPERATEURS] s ON all_operators.OperatorCode = s.OperatorCode AND s.SessionStatus = 'ACTIVE'
+                LEFT JOIN [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS] h ON all_operators.OperatorCode = h.OperatorCode 
+                    AND h.Statut IN ('EN_COURS', 'EN_PAUSE')
+                    AND CAST(h.DateCreation AS DATE) = CAST(GETDATE() AS DATE)
+                LEFT JOIN [SEDI_ERP].[dbo].[RESSOURC] r ON all_operators.OperatorCode = r.Coderessource
+                ORDER BY all_operators.OperatorCode
+            `;
 
         const operators = await executeQuery(operatorsQuery);
         
@@ -1253,10 +1314,14 @@ router.get('/operators', async (req, res) => {
                 name: op.NomOperateur || `Opérateur ${op.OperatorCode}`,
                 loginTime: op.LoginTime,
                 status: op.SessionStatus,
+                activityStatus: op.ActivityStatus || 'INACTIVE',
+                lastActivityTime: op.LastActivityTime,
+                currentStatus: op.CurrentStatus,
                 resourceCode: op.RessourceCode,
                 deviceInfo: op.DeviceInfo,
                 // Validation de l'association
-                isProperlyLinked: op.RessourceCode === op.OperatorCode
+                isProperlyLinked: op.RessourceCode === op.OperatorCode,
+                isActive: op.CurrentStatus === 'EN_OPERATION'
             }))
         });
 
@@ -1265,6 +1330,70 @@ router.get('/operators', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Erreur lors de la récupération des opérateurs connectés',
+            details: error.message
+        });
+    }
+});
+
+// Route pour résoudre les conflits de lancements
+router.post('/resolve-conflict', async (req, res) => {
+    try {
+        const { lancementCode, action, operatorId } = req.body;
+        
+        if (!lancementCode || !action) {
+            return res.status(400).json({
+                success: false,
+                error: 'lancementCode et action sont requis'
+            });
+        }
+
+        if (action === 'force-stop') {
+            // Forcer l'arrêt de tous les lancements en cours pour ce code
+            const stopQuery = `
+                UPDATE [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
+                SET Statut = 'FORCE_STOP', HeureFin = CAST(GETDATE() AS TIME)
+                WHERE CodeLanctImprod = @lancementCode
+                AND Statut IN ('EN_COURS', 'EN_PAUSE')
+                AND CAST(DateCreation AS DATE) = CAST(GETDATE() AS DATE)
+            `;
+            
+            await executeQuery(stopQuery, { lancementCode });
+            
+            res.json({
+                success: true,
+                message: `Tous les lancements ${lancementCode} ont été forcés à l'arrêt`
+            });
+            
+        } else if (action === 'assign-to-operator' && operatorId) {
+            // Réassigner le lancement à un opérateur spécifique
+            // D'abord arrêter tous les autres
+            const stopOthersQuery = `
+                UPDATE [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
+                SET Statut = 'REASSIGNED', HeureFin = CAST(GETDATE() AS TIME)
+                WHERE CodeLanctImprod = @lancementCode
+                AND Statut IN ('EN_COURS', 'EN_PAUSE')
+                AND OperatorCode != @operatorId
+                AND CAST(DateCreation AS DATE) = CAST(GETDATE() AS DATE)
+            `;
+            
+            await executeQuery(stopOthersQuery, { lancementCode, operatorId });
+            
+            res.json({
+                success: true,
+                message: `Lancement ${lancementCode} réassigné à l'opérateur ${operatorId}`
+            });
+        } else {
+            res.status(400).json({
+                success: false,
+                error: 'Action non reconnue'
+            });
+        }
+
+    } catch (error) {
+        console.error('❌ Erreur lors de la résolution du conflit:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Erreur lors de la résolution du conflit',
             details: error.message
         });
     }

@@ -952,6 +952,29 @@ tr:hover {
     border: 1px solid #dee2e6;
 }
 
+/* Indicateur des opérateurs actifs */
+.active-operators-indicator {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem;
+    background: rgba(40, 167, 69, 0.1);
+    border: 1px solid rgba(40, 167, 69, 0.3);
+    border-radius: 8px;
+    min-width: 200px;
+}
+
+.active-operators-indicator .badge {
+    font-size: 0.8em;
+    padding: 0.4em 0.8em;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
 /* Styles pour l'édition des lignes */
 .action-buttons {
     white-space: nowrap;

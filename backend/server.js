@@ -54,10 +54,10 @@ app.use(cors({
     credentials: true
 }));
 
-// Rate limiting - plus permissif en développement
+// Rate limiting optimisé pour 20 connexions simultanées
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: process.env.NODE_ENV === 'production' ? 100 : 1000, // 100 en prod, 1000 en dev
+    max: process.env.NODE_ENV === 'production' ? 200 : 2000, // 200 en prod, 2000 en dev
     message: {
         error: 'Trop de requêtes, veuillez patienter',
         retryAfter: Math.ceil(15 * 60 * 1000 / 1000) // en secondes
@@ -65,8 +65,11 @@ const limiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     skip: (req) => {
-        // Skip rate limiting pour les requêtes de santé
-        return req.path === '/api/health';
+        // Skip rate limiting pour les requêtes de santé et les opérations critiques
+        return req.path === '/api/health' || 
+               req.path.startsWith('/api/operators/start') ||
+               req.path.startsWith('/api/operators/stop') ||
+               req.path.startsWith('/api/operators/pause');
     }
 });
 app.use(limiter);
@@ -212,10 +215,12 @@ function startPeriodicCleanup() {
 }
 
 if (shouldStartServer()) {
-    server = app.listen(PORT, async () => {
-        console.log(`🚀 Serveur SEDI Tablette démarré sur le port ${PORT}`);
-        console.log(`📊 Interface admin: http://localhost:${PORT}/api/admin`);
-        console.log(`🔍 Santé: http://localhost:${PORT}/api/health`);
+    // Utiliser le port 3033 pour le développement local
+    const devPort = process.env.NODE_ENV === 'development' ? 3033 : PORT;
+    server = app.listen(devPort, async () => {
+        console.log(`🚀 Serveur SEDI Tablette démarré sur le port ${devPort}`);
+        console.log(`📊 Interface admin: http://localhost:${devPort}/api/admin`);
+        console.log(`🔍 Santé: http://localhost:${devPort}/api/health`);
         
         // Effectuer le nettoyage automatique au démarrage
         await performStartupCleanup();

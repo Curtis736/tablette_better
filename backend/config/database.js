@@ -27,9 +27,14 @@ const config = {
         connectionTimeout: 30000
     },
     pool: {
-        max: 10,
-        min: 0,
-        idleTimeoutMillis: 30000
+        max: 25,  // Augmenté pour 20 connexions + marge
+        min: 5,   // Minimum de connexions actives
+        idleTimeoutMillis: 30000,
+        acquireTimeoutMillis: 60000,  // Timeout pour acquérir une connexion
+        createTimeoutMillis: 30000,   // Timeout pour créer une connexion
+        destroyTimeoutMillis: 5000,   // Timeout pour détruire une connexion
+        reapIntervalMillis: 1000,     // Intervalle de nettoyage
+        createRetryIntervalMillis: 200 // Intervalle de retry
     }
 };
 
@@ -55,9 +60,14 @@ const erpConfig = {
         connectionTimeout: 30000
     },
     pool: {
-        max: 10,
-        min: 0,
-        idleTimeoutMillis: 30000
+        max: 25,  // Augmenté pour 20 connexions + marge
+        min: 5,   // Minimum de connexions actives
+        idleTimeoutMillis: 30000,
+        acquireTimeoutMillis: 60000,  // Timeout pour acquérir une connexion
+        createTimeoutMillis: 30000,   // Timeout pour créer une connexion
+        destroyTimeoutMillis: 5000,   // Timeout pour détruire une connexion
+        reapIntervalMillis: 1000,     // Intervalle de nettoyage
+        createRetryIntervalMillis: 200 // Intervalle de retry
     }
 };
 

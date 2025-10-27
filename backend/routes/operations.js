@@ -2,6 +2,9 @@
 const express = require('express');
 const router = express.Router();
 const { executeQuery } = require('../config/database');
+const { validateOperatorSession, validateDataOwnership, logSecurityAction } = require('../middleware/operatorSecurity');
+const dataValidation = require('../services/DataValidationService');
+const { validateConcurrency, releaseResources } = require('../middleware/concurrencyManager');
 
 // Route de test pour insertion réelle dans SEDI_APP_INDEPENDANTE
 router.post('/test-sedi-table', async (req, res) => {
@@ -62,7 +65,7 @@ router.post('/test-sedi-table', async (req, res) => {
 });
 
 // POST /api/operations/start - Démarrer une opération (UTILISE LES 3 TABLES)
-router.post('/start', async (req, res) => {
+router.post('/start', validateConcurrency, releaseResources, async (req, res) => {
     try {
         console.log('🚀 Démarrage opération avec 3 tables:', req.body);
         const { operatorId, lancementCode } = req.body;
@@ -72,6 +75,26 @@ router.post('/start', async (req, res) => {
                 error: 'operatorId et lancementCode sont requis' 
             });
         }
+        
+        // 🔒 Sécurité validée par le middleware validateOperatorSession
+        
+        // 🔍 VALIDATION SIMPLIFIÉE : Vérifier seulement que l'opérateur existe
+        const operatorCheckQuery = `
+            SELECT TOP 1 Coderessource, Designation1, Typeressource
+            FROM [SEDI_ERP].[dbo].[RESSOURC]
+            WHERE Coderessource = @operatorId
+        `;
+        
+        const operatorResult = await executeQuery(operatorCheckQuery, { operatorId });
+        
+        if (operatorResult.length === 0) {
+            return res.status(400).json({
+                error: 'Opérateur non trouvé dans la base de données',
+                security: 'OPERATOR_NOT_FOUND'
+            });
+        }
+        
+        console.log(`✅ Opérateur validé: ${operatorId} (${operatorResult[0].Designation1})`);
         
         // Lire les infos de l'opérateur
         let operatorInfo = null;
@@ -100,6 +123,32 @@ router.post('/start', async (req, res) => {
         } catch (error) {
             console.log('⚠️ Erreur lecture lancement:', error.message);
         }
+
+        // Vérifier si le lancement est déjà en cours par un autre opérateur
+        try {
+            const conflictQuery = `
+                SELECT TOP 1 OperatorCode, Statut, DateCreation
+                FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
+                WHERE CodeLanctImprod = @lancementCode
+                AND Statut IN ('EN_COURS', 'EN_PAUSE')
+                AND CAST(DateCreation AS DATE) = CAST(GETDATE() AS DATE)
+                AND OperatorCode != @operatorId
+            `;
+            const conflictResult = await executeQuery(conflictQuery, { lancementCode, operatorId });
+            
+            if (conflictResult.length > 0) {
+                return res.status(409).json({
+                    error: `Le lancement ${lancementCode} est déjà en cours par l'opérateur ${conflictResult[0].OperatorCode}`,
+                    conflict: {
+                        operatorCode: conflictResult[0].OperatorCode,
+                        status: conflictResult[0].Statut,
+                        startTime: conflictResult[0].DateCreation
+                    }
+                });
+            }
+        } catch (error) {
+            console.log('⚠️ Erreur vérification conflit:', error.message);
+        }
         
         // 1️⃣ CRÉER/METTRE À JOUR SESSION dans ABSESSIONS_OPERATEURS
         console.log('📝 1. Gestion session opérateur...');
@@ -115,16 +164,25 @@ router.post('/start', async (req, res) => {
             const existingSession = await executeQuery(sessionCheckQuery, { operatorId });
             
             if (existingSession.length === 0) {
-                // Créer nouvelle session
-                const sessionInsertQuery = `
-                    INSERT INTO [SEDI_APP_INDEPENDANTE].[dbo].[ABSESSIONS_OPERATEURS]
-                    (OperatorCode, LoginTime, SessionStatus, DeviceInfo, DateCreation)
-                    VALUES (@operatorId, GETDATE(), 'ACTIVE', 'Tablette SEDI', GETDATE())
-                `;
+            // Créer nouvelle session
+            const sessionInsertQuery = `
+                INSERT INTO [SEDI_APP_INDEPENDANTE].[dbo].[ABSESSIONS_OPERATEURS]
+                (OperatorCode, LoginTime, SessionStatus, DeviceInfo, DateCreation)
+                VALUES (@operatorId, GETDATE(), 'ACTIVE', 'Tablette SEDI', GETDATE())
+            `;
                 await executeQuery(sessionInsertQuery, { operatorId });
-                console.log('✅ Nouvelle session créée');
+                console.log('✅ Nouvelle session créée avec statut ACTIF');
             } else {
-                console.log('✅ Session active existante utilisée');
+                // Mettre à jour la session existante
+                const updateActivityQuery = `
+                    UPDATE [SEDI_APP_INDEPENDANTE].[dbo].[ABSESSIONS_OPERATEURS]
+                    SET LoginTime = GETDATE()
+                    WHERE OperatorCode = @operatorId 
+                    AND SessionStatus = 'ACTIVE'
+                    AND CAST(DateCreation AS DATE) = CAST(GETDATE() AS DATE)
+                `;
+                await executeQuery(updateActivityQuery, { operatorId });
+                console.log('✅ Session mise à jour - Opérateur actif');
             }
         } catch (error) {
             console.log('⚠️ Erreur session:', error.message);

@@ -234,19 +234,31 @@ class OperateurInterface {
             }
             
         } catch (error) {
-            // BLOQUER complètement si le lancement n'existe pas dans LCTE
+            // Gérer les différents types d'erreurs
             console.error('Erreur validation lancement:', error);
             this.currentLancement = null;
-            this.lancementDetails.innerHTML = `
-                <strong>Code: ${code}</strong><br>
-                <small>❌ Lancement non trouvé dans la base de données LCTE</small><br>
-                <small>Veuillez vérifier le code de lancement</small>
-            `;
-            this.notificationManager.error('Code de lancement invalide - Non trouvé dans LCTE');
             
-            // DÉSACTIVER le bouton démarrer
-            this.startBtn.disabled = true;
-            this.startBtn.textContent = 'Code invalide';
+            if (error.status === 409) {
+                // Conflit : lancement déjà en cours par un autre opérateur
+                this.lancementDetails.innerHTML = `
+                    <strong>Code: ${code}</strong><br>
+                    <small style="color: red;">❌ Lancement déjà en cours par un autre opérateur</small><br>
+                    <small style="color: orange;">⚠️ Contactez l'administrateur pour résoudre le conflit</small>
+                `;
+                this.notificationManager.error(`Conflit : ${error.message}`);
+                this.startBtn.disabled = true;
+                this.startBtn.textContent = 'Conflit détecté';
+            } else {
+                // Autres erreurs (lancement non trouvé, etc.)
+                this.lancementDetails.innerHTML = `
+                    <strong>Code: ${code}</strong><br>
+                    <small>❌ Lancement non trouvé dans la base de données LCTE</small><br>
+                    <small>Veuillez vérifier le code de lancement</small>
+                `;
+                this.notificationManager.error('Code de lancement invalide - Non trouvé dans LCTE');
+                this.startBtn.disabled = true;
+                this.startBtn.textContent = 'Code invalide';
+            }
             
             // Vider le champ après un délai
             setTimeout(() => {
