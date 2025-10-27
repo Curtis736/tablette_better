@@ -9,3 +9,8 @@
 
 # Nettoyage des logs anciens (plus de 30 jours)
 0 3 * * * find /var/log/sedi-*.log -mtime +30 -delete
+
+
+
+
+

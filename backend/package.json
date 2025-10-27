@@ -18,6 +18,7 @@
     "lint": "eslint . --ext .js",
     "lint:fix": "eslint . --ext .js --fix",
     "lint:report": "eslint . --ext .js --format json --output-file eslint-report.json",
+    "test:security": "node scripts/security-test.js",
     "sonar": "sonar-scanner",
     "quality": "npm run lint:report && npm run sonar",
     "test:full": "npm run test:all && npm run quality"

@@ -170,3 +170,8 @@ En cas de problème de sécurité :
 ---
 
 **⚠️ IMPORTANT** : Ce système est conçu pour être auto-sécurisé, mais une surveillance humaine reste nécessaire pour détecter les patterns d'attaque sophistiqués.
+
+
+
+
+

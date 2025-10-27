@@ -82,3 +82,8 @@ echo "   sudo journalctl -u nginx -f"
 echo "   tail -f backend/logs/*.log"
 
 
+
+
+
+
+

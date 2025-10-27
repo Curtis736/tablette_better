@@ -65,3 +65,8 @@ echo "pkill -f 'node server.js'"
 echo "NODE_ENV=production PORT=3001 node server.js"
 
 
+
+
+
+
+
