@@ -1,0 +1,33 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'sedi-tablette-monitor'
+
+# Configurations d'alertes
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Règles d'alerte
+rule_files:
+  # - "alerts.yml"
+
+# Configuration des endpoints à scraper
+scrape_configs:
+  # Métriques de l'application SEDI Tablette
+  - job_name: 'sedi-tablette-backend'
+    static_configs:
+      - targets: ['sedi-backend:3001']
+        labels:
+          service: 'sedi-tablette'
+          instance: 'backend'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Métriques Prometheus lui-même
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

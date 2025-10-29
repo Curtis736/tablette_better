@@ -12,6 +12,8 @@ const operationRoutes = require('./routes/operations');
 const adminRoutes = require('./routes/admin');
 const authRoutes = require('./routes/auth');
 const commentRoutes = require('./routes/comments');
+const { metricsMiddleware, getMetrics, register } = require('./middleware/metrics');
+
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -81,6 +83,8 @@ app.use(express.urlencoded({ extended: true }));
 // Logging
 app.use(morgan('combined'));
 
+// Métriques
+app.use(metricsMiddleware);
 // Rate limiting spécifique pour les routes admin (plus permissif)
 const adminLimiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1 minute
@@ -112,6 +116,17 @@ app.get('/api/health', (req, res) => {
     });
 });
 
+// Route métriques Prometheus
+app.get('/metrics', async (req, res) => {
+    try {
+        res.set('Content-Type', register.contentType);
+        const metrics = await getMetrics();
+        res.end(metrics);
+    } catch (error) {
+        console.error('Erreur lors de la récupération des métriques:', error);
+        res.status(500).end();
+    }
+});
 // Route racine
 app.get('/', (req, res) => {
     res.json({ 
