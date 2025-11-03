@@ -30,7 +30,7 @@ services:
     volumes:
       - sedi-logs:/app/logs
       - /etc/localtime:/etc/localtime:ro
-      - ../backend:/app
+      - ../backend/routes:/app/routes
     labels:
       - "com.sedi.service=backend"
       - "com.sedi.environment=production"
