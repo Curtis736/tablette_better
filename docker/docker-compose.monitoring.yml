@@ -6,7 +6,7 @@ services:
       dockerfile: Dockerfile.prometheus
     container_name: sedi-prometheus
     ports:
-      - "9090:9090"
+      - "9091:9090"
     volumes:
       - prometheus_data:/prometheus
     command:
