@@ -1145,13 +1145,15 @@ router.post('/operations', async (req, res) => {
         console.log('✅ Lancement validé:', validation.data);
         
         // Insérer dans ABHISTORIQUE_OPERATEURS
+        // CodeRubrique est utilisé pour identifier l'opérateur qui effectue l'opération
+        const codeRubrique = phase || operatorId;
         const insertQuery = `
             INSERT INTO [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
             (OperatorCode, CodeLanctImprod, CodeRubrique, Ident, Phase, Statut, HeureDebut, HeureFin, DateCreation)
             VALUES (
                 '${operatorId}',
                 '${lancementCode}',
-                '${phase || 'ADMIN'}',
+                '${codeRubrique}',
                 '${status}',
                 '${phase || 'ADMIN'}',
                 '${status === 'DEBUT' ? 'EN_COURS' : status === 'FIN' ? 'TERMINE' : status}',
@@ -1300,7 +1302,7 @@ router.get('/operators', async (req, res) => {
                     AND h.Statut IN ('EN_COURS', 'EN_PAUSE')
                     AND CAST(h.DateCreation AS DATE) = CAST(GETDATE() AS DATE)
                 LEFT JOIN [SEDI_ERP].[dbo].[RESSOURC] r ON all_operators.OperatorCode = r.Coderessource
-                ORDER BY all_operators.OperatorCode
+                ORDER BY OperatorCode
             `;
 
         const operators = await executeQuery(operatorsQuery);
@@ -2520,7 +2522,7 @@ router.post('/debug/create-test-pause-reprise', async (req, res) => {
             VALUES (
                 '${operatorCode}',
                 '${lancementCode}',
-                'PRODUCTION',
+                '${operatorCode}',
                 'PAUSE',
                 'PRODUCTION',
                 'EN_PAUSE',
@@ -2536,7 +2538,7 @@ router.post('/debug/create-test-pause-reprise', async (req, res) => {
             VALUES (
                 '${operatorCode}',
                 '${lancementCode}',
-                'PRODUCTION',
+                '${operatorCode}',
                 'REPRISE',
                 'PRODUCTION',
                 'EN_COURS',
