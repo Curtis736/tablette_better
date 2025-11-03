@@ -74,11 +74,8 @@ services:
 
 networks:
   sedi-network:
+    external: true
     name: sedi-tablette-network
-    driver: bridge
-    labels:
-      - "com.sedi.network=main"
-      - "com.sedi.environment=production"
 
 volumes:
   sedi-logs:
