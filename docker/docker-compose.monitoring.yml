@@ -1,26 +1,22 @@
 services:
   # Prometheus - Collecte et stockage des métriques
   prometheus:
-    image: prom/prometheus:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.prometheus
     container_name: sedi-prometheus
     ports:
       - "9090:9090"
     volumes:
-      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=30d'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
       - '--web.enable-lifecycle'
     networks:
       - sedi-network
     restart: unless-stopped
-    labels:
-      - "com.sedi.service=monitoring"
-      - "com.sedi.component=prometheus"
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
       interval: 30s
@@ -36,8 +32,8 @@ services:
       - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
@@ -46,7 +42,6 @@ services:
       - GF_INSTALL_PLUGINS=
       - GF_SECURITY_SECRET_KEY=sedi-grafana-secret-key-change-in-production
       - GF_AUTH_ANONYMOUS_ENABLED=false
-      # Configuration pour prometheus
       - GF_AUTH_BASIC_ENABLED=true
       - GF_AUTH_DISABLE_LOGIN_FORM=false
     networks:
@@ -54,9 +49,6 @@ services:
     restart: unless-stopped
     depends_on:
       - prometheus
-    labels:
-      - "com.sedi.service=monitoring"
-      - "com.sedi.component=grafana"
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
@@ -71,15 +63,7 @@ networks:
 
 volumes:
   prometheus_data:
-    name: sedi-prometheus-data
     driver: local
-    labels:
-      - "com.sedi.volume=monitoring"
-      - "com.sedi.description=Stockage des métriques Prometheus"
   
   grafana_data:
-    name: sedi-grafana-data
     driver: local
-    labels:
-      - "com.sedi.volume=monitoring"
-      - "com.sedi.description=Stockage des données Grafana"

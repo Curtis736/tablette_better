@@ -4,16 +4,6 @@ global:
   external_labels:
     monitor: 'sedi-tablette-monitor'
 
-# Configurations d'alertes
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets: []
-
-# Règles d'alerte
-rule_files:
-  # - "alerts.yml"
-
 # Configuration des endpoints à scraper
 scrape_configs:
   # Métriques de l'application SEDI Tablette
