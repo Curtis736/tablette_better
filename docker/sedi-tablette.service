@@ -1,0 +1,20 @@
+[Unit]
+Description=SEDI Tablette Docker Compose Service
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/maintenance/tablette_better/docker
+ExecStart=/usr/bin/docker compose -f docker-compose.production.yml up -d
+ExecStop=/usr/bin/docker compose -f docker-compose.production.yml down
+TimeoutStartSec=0
+User=maintenance
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+

@@ -11,7 +11,7 @@ services:
     volumes:
       - ../backend/config-production.js:/app/config-production.js:ro
       - ../backend/logs:/app/logs
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
       interval: 30s
@@ -25,7 +25,7 @@ services:
       - "8080:80"
     depends_on:
       - backend
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80"]
       interval: 30s
