@@ -8,12 +8,12 @@ WORKDIR /app
 # Stage 2: Dependencies (pour le cache des layers)
 FROM base AS dependencies
 COPY backend/package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+RUN npm ci --omit=dev || npm install --omit=dev && npm cache clean --force
 
 # Stage 3: Development
 FROM base AS development
 COPY backend/package*.json ./
-RUN npm ci && npm cache clean --force
+RUN npm ci || npm install && npm cache clean --force
 COPY backend/ ./
 EXPOSE 3001 9229
 USER node
