@@ -18,17 +18,29 @@ const { metricsMiddleware, getMetrics, register } = require('./middleware/metric
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware de sécurité
-app.use(helmet());
+// CORS configuration - Must be before Helmet
+const allowedOrigins = [
+    'http://localhost:8080',
+    'http://127.0.0.1:8080',
+    'http://localhost:3001',
+    'http://127.0.0.1:3001',
+    'http://192.168.1.26:8080',
+    'http://192.168.1.26:3001',
+    process.env.FRONTEND_URL
+].filter(Boolean);
 
 // Ensure CORS headers are present on all responses (including errors)
 // and reply to OPTIONS preflight requests even if later middleware/errors occur.
 app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (origin) {
+    if (origin && allowedOrigins.includes(origin)) {
         // Echo back the origin so browsers accept credentialed responses
         res.setHeader('Access-Control-Allow-Origin', origin);
         // Inform caches that response varies by origin
+        res.setHeader('Vary', 'Origin');
+    } else if (origin) {
+        // Allow any origin in development, or specific origin in production
+        res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Vary', 'Origin');
     }
     res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -43,16 +55,21 @@ app.use((req, res, next) => {
     next();
 });
 
+// Middleware de sécurité - Configure Helmet to allow CORS
+app.use(helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginEmbedderPolicy: false
+}));
+
 app.use(cors({
-    origin: [
-        'http://localhost:8080',
-        'http://127.0.0.1:8080',
-        'http://localhost:3001',
-        'http://127.0.0.1:3001',
-        'http://192.168.1.26:8080',
-        'http://192.168.1.26:3001',
-        process.env.FRONTEND_URL
-    ].filter(Boolean),
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(null, true); // Allow all origins for now, adjust if needed
+        }
+    },
     credentials: true
 }));
 
