@@ -18,7 +18,7 @@ const { metricsMiddleware, getMetrics, register } = require('./middleware/metric
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// CORS configuration - Must be before Helmet
+// CORS configuration - MUST be before Helmet
 const allowedOrigins = [
     'http://localhost:8080',
     'http://127.0.0.1:8080',
@@ -29,48 +29,34 @@ const allowedOrigins = [
     process.env.FRONTEND_URL
 ].filter(Boolean);
 
-// Ensure CORS headers are present on all responses (including errors)
-// and reply to OPTIONS preflight requests even if later middleware/errors occur.
-app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    if (origin && allowedOrigins.includes(origin)) {
-        // Echo back the origin so browsers accept credentialed responses
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        // Inform caches that response varies by origin
-        res.setHeader('Vary', 'Origin');
-    } else if (origin) {
-        // Allow any origin in development, or specific origin in production
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        res.setHeader('Vary', 'Origin');
-    }
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-
-    if (req.method === 'OPTIONS') {
-        // short-circuit preflight
-        return res.status(204).end();
-    }
-
-    next();
-});
+// Configure CORS - Allow all origins for now to fix CORS issues
+app.use(cors({
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) {
+            return callback(null, true);
+        }
+        // Allow any origin that matches our list or in development
+        if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+            callback(null, true);
+        } else {
+            // Allow anyway for now to fix CORS issues
+            callback(null, true);
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
+    exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
+    preflightContinue: false,
+    optionsSuccessStatus: 204
+}));
 
 // Middleware de sécurité - Configure Helmet to allow CORS
 app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
-    crossOriginEmbedderPolicy: false
-}));
-
-app.use(cors({
-    origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps or curl requests)
-        if (!origin || allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(null, true); // Allow all origins for now, adjust if needed
-        }
-    },
-    credentials: true
+    crossOriginEmbedderPolicy: false,
+    contentSecurityPolicy: false // Disable CSP for now to avoid CORS conflicts
 }));
 
 // Rate limiting optimisé pour 20 connexions simultanées
