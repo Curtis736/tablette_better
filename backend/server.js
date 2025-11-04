@@ -54,7 +54,7 @@ app.use(cors({
 
 // Middleware de sécurité - Configure Helmet to allow CORS
 app.use(helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginResourcePolicy: false, // Disable CORP to allow CORS
     crossOriginEmbedderPolicy: false,
     contentSecurityPolicy: false // Disable CSP for now to avoid CORS conflicts
 }));
