@@ -20,10 +20,10 @@ async function validateLancement(codeLancement) {
                 [DesignationArt1],
                 [DesignationArt2]
             FROM [SEDI_ERP].[dbo].[LCTE]
-            WHERE [CodeLancement] = '${codeLancement}'
+            WHERE [CodeLancement] = @codeLancement
         `;
         
-        const result = await executeQuery(query);
+        const result = await executeQuery(query, { codeLancement });
         
         if (result && result.length > 0) {
             const lancement = result[0];
@@ -152,6 +152,16 @@ function formatDateTime(dateTime) {
     if (!dateTime) {
         console.log('🔍 formatDateTime: dateTime est null/undefined');
         return null;
+    }
+    
+    // Si c'est un tableau, prendre le premier élément
+    if (Array.isArray(dateTime)) {
+        console.log('🔍 formatDateTime: Tableau détecté, utilisation du premier élément');
+        if (dateTime.length > 0) {
+            dateTime = dateTime[0];
+        } else {
+            return null;
+        }
     }
     
     try {
@@ -469,19 +479,58 @@ function processLancementEventsWithPauses(events) {
         const repriseEvents = groupEvents.filter(e => e.Ident === 'REPRISE');
         
         // Déterminer le statut final (une seule ligne par opérateur/lancement)
+        // PRIORITÉ : Utiliser le statut de la base de données s'il a été modifié manuellement
+        // Sinon, calculer à partir des événements
         let currentStatus = 'EN_COURS';
         let statusLabel = 'En cours';
         
-        if (finEvent) {
-            currentStatus = 'TERMINE';
-            statusLabel = 'Terminé';
-        } else if (pauseEvents.length > 0 && repriseEvents.length === 0) {
-            // En pause seulement si il y a des pauses sans reprise
-            currentStatus = 'EN_PAUSE';
-            statusLabel = 'En pause';
-        } else {
-            currentStatus = 'EN_COURS';
-            statusLabel = 'En cours';
+        // PRIORITÉ : Vérifier si l'événement DEBUT a un statut modifié manuellement
+        // Le statut est modifié sur l'événement DEBUT (le plus récent si plusieurs)
+        const debutEvents = groupEvents.filter(e => e.Ident === 'DEBUT').sort((a, b) => 
+            new Date(b.DateCreation) - new Date(a.DateCreation)
+        );
+        const lastDebutEvent = debutEvents[0];
+        
+        // Si l'événement DEBUT a un statut explicite (modifié manuellement), l'utiliser en priorité
+        if (lastDebutEvent && lastDebutEvent.Statut && lastDebutEvent.Statut.trim() !== '') {
+            const dbStatus = lastDebutEvent.Statut.toUpperCase().trim();
+            const statusMap = {
+                'EN_COURS': 'En cours',
+                'EN_PAUSE': 'En pause',
+                'PAUSE': 'En pause',
+                'TERMINE': 'Terminé',
+                'TERMINÉ': 'Terminé',
+                'PAUSE_TERMINEE': 'Pause terminée',
+                'PAUSE_TERMINÉE': 'Pause terminée',
+                'FORCE_STOP': 'Arrêt forcé'
+            };
+            
+            // Utiliser le statut de la base de données si c'est un statut valide
+            if (statusMap[dbStatus] || dbStatus === 'TERMINE' || dbStatus === 'TERMINÉ') {
+                currentStatus = dbStatus;
+                statusLabel = statusMap[dbStatus] || (dbStatus === 'TERMINE' || dbStatus === 'TERMINÉ' ? 'Terminé' : dbStatus);
+                console.log(`✅ Utilisation du statut de la base de données depuis événement DEBUT: ${currentStatus} (${statusLabel})`);
+                console.log(`🔍 Événement DEBUT utilisé:`, {
+                    NoEnreg: lastDebutEvent.NoEnreg,
+                    Statut: lastDebutEvent.Statut,
+                    DateCreation: lastDebutEvent.DateCreation
+                });
+            }
+        }
+        
+        // Si aucun statut explicite n'a été trouvé sur l'événement DEBUT, calculer à partir des événements
+        if (!lastDebutEvent || !lastDebutEvent.Statut || lastDebutEvent.Statut.trim() === '') {
+            if (finEvent) {
+                currentStatus = 'TERMINE';
+                statusLabel = 'Terminé';
+            } else if (pauseEvents.length > 0 && repriseEvents.length === 0) {
+                // En pause seulement si il y a des pauses sans reprise
+                currentStatus = 'EN_PAUSE';
+                statusLabel = 'En pause';
+            } else {
+                currentStatus = 'EN_COURS';
+                statusLabel = 'En cours';
+            }
         }
         
         // Créer UNE SEULE ligne par opérateur/lancement (pas de doublons)
@@ -524,13 +573,16 @@ function createLancementItem(startEvent, sequence, status, statusLabel, endTime 
     
     // Traitement sécurisé de l'heure de début
     let startTime;
-    if (startEvent.HeureDebut) {
-        if (typeof startEvent.HeureDebut === 'string' && /^\d{2}:\d{2}(:\d{2})?$/.test(startEvent.HeureDebut)) {
+    // Gérer le cas où HeureDebut est un tableau
+    let heureDebut = Array.isArray(startEvent.HeureDebut) ? startEvent.HeureDebut[0] : startEvent.HeureDebut;
+    
+    if (heureDebut) {
+        if (typeof heureDebut === 'string' && /^\d{2}:\d{2}(:\d{2})?$/.test(heureDebut)) {
             // Format HH:mm ou HH:mm:ss - retourner directement
-            startTime = startEvent.HeureDebut.substring(0, 5);
-        } else if (startEvent.HeureDebut instanceof Date) {
+            startTime = heureDebut.substring(0, 5);
+        } else if (heureDebut instanceof Date) {
             // Objet Date - extraire l'heure avec fuseau horaire français
-            startTime = startEvent.HeureDebut.toLocaleTimeString('fr-FR', {
+            startTime = heureDebut.toLocaleTimeString('fr-FR', {
                 timeZone: 'Europe/Paris',
                 hour: '2-digit',
                 minute: '2-digit',
@@ -538,7 +590,7 @@ function createLancementItem(startEvent, sequence, status, statusLabel, endTime 
             });
         } else {
             // Autre format - utiliser formatDateTime
-            startTime = formatDateTime(startEvent.HeureDebut);
+            startTime = formatDateTime(heureDebut);
         }
     } else {
         // Pas d'heure de début - utiliser DateCreation
@@ -560,13 +612,16 @@ function createLancementItem(startEvent, sequence, status, statusLabel, endTime 
         finalEndTime = endTime;
     } else if (finEvent) {
         // Pour les opérations terminées, utiliser HeureFin ou DateCreation
-        if (finEvent.HeureFin) {
-            if (typeof finEvent.HeureFin === 'string' && /^\d{2}:\d{2}(:\d{2})?$/.test(finEvent.HeureFin)) {
+        // Gérer le cas où HeureFin est un tableau
+        let heureFin = Array.isArray(finEvent.HeureFin) ? finEvent.HeureFin[0] : finEvent.HeureFin;
+        
+        if (heureFin) {
+            if (typeof heureFin === 'string' && /^\d{2}:\d{2}(:\d{2})?$/.test(heureFin)) {
                 // Format HH:mm ou HH:mm:ss - retourner directement
-                finalEndTime = finEvent.HeureFin.substring(0, 5);
-            } else if (finEvent.HeureFin instanceof Date) {
+                finalEndTime = heureFin.substring(0, 5);
+            } else if (heureFin instanceof Date) {
                 // Objet Date - extraire l'heure avec fuseau horaire français
-                finalEndTime = finEvent.HeureFin.toLocaleTimeString('fr-FR', {
+                finalEndTime = heureFin.toLocaleTimeString('fr-FR', {
                     timeZone: 'Europe/Paris',
                     hour: '2-digit',
                     minute: '2-digit',
@@ -574,7 +629,7 @@ function createLancementItem(startEvent, sequence, status, statusLabel, endTime 
                 });
             } else {
                 // Autre format - utiliser formatDateTime
-                finalEndTime = formatDateTime(finEvent.HeureFin);
+                finalEndTime = formatDateTime(heureFin);
             }
         } else {
             // Pas d'heure de fin - utiliser DateCreation
@@ -851,7 +906,7 @@ async function getAdminStats(date) {
     try {
         // Compter les opérateurs actifs (connectés OU avec lancement en cours)
         const operatorsQuery = `
-            SELECT COUNT(DISTINCT COALESCE(s.OperatorCode, h.OperatorCode)) as totalOperators
+            SELECT COUNT(DISTINCT active_operators.OperatorCode) as totalOperators
             FROM (
                 -- Opérateurs connectés
                 SELECT OperatorCode
@@ -871,31 +926,78 @@ async function getAdminStats(date) {
             ) active_operators
         `;
         
-        // Récupérer tous les événements depuis ABHISTORIQUE_OPERATEURS
-        const eventsQuery = `
-        SELECT 
-                CodeLanctImprod,
-                CodeRubrique,
-                Ident,
-                DateCreation
-            FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
-            ORDER BY DateCreation ASC
-        `;
+        // Récupérer les événements depuis ABHISTORIQUE_OPERATEURS pour la date spécifiée
+        // Utiliser la même logique que getAdminOperations pour la cohérence
+        const targetDate = date ? moment(date).format('YYYY-MM-DD') : moment().format('YYYY-MM-DD');
         
-        const [operatorStats, events] = await Promise.all([
-            executeQuery(operatorsQuery),
-            executeQuery(eventsQuery)
+        // Utiliser le service de validation pour récupérer les événements (même source que le tableau)
+        const validationResult = await dataValidation.getAdminDataSecurely();
+        
+        // Exécuter la requête des opérateurs en parallèle
+        const [operatorStats] = await Promise.all([
+            executeQuery(operatorsQuery)
         ]);
         
-        // Traiter les événements pour calculer les statuts
-        const processedLancements = processLancementEvents(events || []);
+        if (!validationResult.valid) {
+            console.error('❌ Erreur de validation des données pour les statistiques:', validationResult.error);
+            return {
+                totalOperators: operatorStats[0]?.totalOperators || 0,
+                activeLancements: 0,
+                pausedLancements: 0,
+                completedLancements: 0
+            };
+        }
         
-        // Compter par statut
-        const activeLancements = processedLancements.filter(l => l.status === 'En cours').length;
-        const pausedLancements = processedLancements.filter(l => l.status === 'En pause').length;
-        const completedLancements = processedLancements.filter(l => l.status === 'Terminé').length;
+        const allEvents = validationResult.events;
+        
+        // Filtrer les événements par date (par défaut, utiliser aujourd'hui)
+        const filteredEvents = allEvents.filter(event => {
+            const eventDate = moment(event.DateCreation).format('YYYY-MM-DD');
+            return eventDate === targetDate;
+        });
+        
+        console.log(` Calcul des statistiques pour ${filteredEvents.length} événements (date: ${targetDate})`);
+        
+        // Utiliser la même fonction que getAdminOperations pour la cohérence
+        const processedLancements = processLancementEventsWithPauses(filteredEvents);
+        
+        console.log(`📊 ${processedLancements.length} lancements traités pour les statistiques`);
+        
+        // Compter par statut (utiliser statusCode pour plus de fiabilité)
+        // Debug: afficher les statuts trouvés
+        const statusCounts = {};
+        processedLancements.forEach(l => {
+            const key = `${l.statusCode || 'NO_CODE'}_${l.status || 'NO_STATUS'}_${l.statusLabel || 'NO_LABEL'}`;
+            statusCounts[key] = (statusCounts[key] || 0) + 1;
+        });
+        console.log('📊 Répartition des statuts:', statusCounts);
+        
+        const activeLancements = processedLancements.filter(l => 
+            l.statusCode === 'EN_COURS' || 
+            (l.status && (l.status.toLowerCase() === 'en cours' || l.status === 'En cours')) ||
+            (l.statusLabel && l.statusLabel.toLowerCase() === 'en cours')
+        ).length;
+        
+        const pausedLancements = processedLancements.filter(l => 
+            l.statusCode === 'EN_PAUSE' || l.statusCode === 'PAUSE' ||
+            (l.status && (l.status.toLowerCase().includes('pause') || l.status === 'En pause')) ||
+            (l.statusLabel && l.statusLabel.toLowerCase().includes('pause'))
+        ).length;
+        
+        const completedLancements = processedLancements.filter(l => 
+            l.statusCode === 'TERMINE' ||
+            (l.status && (l.status.toLowerCase().includes('terminé') || l.status.toLowerCase().includes('termine'))) ||
+            (l.statusLabel && (l.statusLabel.toLowerCase().includes('terminé') || l.statusLabel.toLowerCase().includes('termine')))
+        ).length;
+        
+        console.log(`📊 Statistiques calculées:`, {
+            active: activeLancements,
+            paused: pausedLancements,
+            completed: completedLancements,
+            total: processedLancements.length
+        });
     
-    return {
+        return {
             totalOperators: operatorStats[0]?.totalOperators || 0,
             activeLancements: activeLancements,
             pausedLancements: pausedLancements,
@@ -980,14 +1082,16 @@ async function getAdminOperations(date, page = 1, limit = 25) {
             );
             
             const firstEvent = relatedEvents[0];
+            // Utiliser le nom depuis lancement si disponible, sinon depuis les événements
+            const operatorName = lancement.operatorName || firstEvent?.operatorName || `Opérateur ${lancement.operatorId}` || 'Non assigné';
             
             return {
                 id: lancement.id,
                 operatorId: lancement.operatorId,
-                operatorName: firstEvent?.operatorName || 'Non assigné',
+                operatorName: operatorName,
                 lancementCode: lancement.lancementCode,
-                article: firstEvent?.Article || 'N/A',
-                articleDetail: firstEvent?.ArticleDetail || '',
+                article: firstEvent?.Article || lancement.article || 'N/A',
+                articleDetail: firstEvent?.ArticleDetail || lancement.articleDetail || '',
                 startTime: lancement.startTime,
                 endTime: lancement.endTime,
                 pauseTime: lancement.pauseTime,
@@ -1133,42 +1237,68 @@ router.post('/operations', async (req, res) => {
         console.log('=== AJOUT NOUVELLE OPERATION ===');
         console.log('Données reçues:', req.body);
         
-        // Valider le numéro de lancement dans LCTE
+        // Valider le numéro de lancement dans LCTE (optionnel pour l'admin)
         const validation = await validateLancement(lancementCode);
-        if (!validation.valid) {
-            return res.status(400).json({
-                success: false,
-                error: validation.error
-            });
-        }
+        let lancementInfo = null;
+        let warning = null;
         
-        console.log('✅ Lancement validé:', validation.data);
+        if (!validation.valid) {
+            // Pour l'admin, on permet de créer une opération même si le lancement n'existe pas
+            // mais on enregistre un avertissement
+            warning = `Attention: Le lancement ${lancementCode} n'existe pas dans la table LCTE. L'opération sera créée mais le lancement devra être créé dans LCTE pour être valide.`;
+            console.warn('⚠️', warning);
+            lancementInfo = {
+                CodeLancement: lancementCode,
+                CodeArticle: null,
+                DesignationLct1: `Lancement ${lancementCode} (non trouvé dans LCTE)`,
+                CodeModele: null,
+                DesignationArt1: null,
+                DesignationArt2: null
+            };
+        } else {
+            lancementInfo = validation.data;
+            console.log('✅ Lancement validé:', lancementInfo);
+        }
         
         // Insérer dans ABHISTORIQUE_OPERATEURS
         // CodeRubrique est utilisé pour identifier l'opérateur qui effectue l'opération
         const codeRubrique = phase || operatorId;
+        const finalStatus = status === 'DEBUT' ? 'EN_COURS' : status === 'FIN' ? 'TERMINE' : status;
+        const finalPhase = phase || 'ADMIN';
+        
         const insertQuery = `
             INSERT INTO [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
             (OperatorCode, CodeLanctImprod, CodeRubrique, Ident, Phase, Statut, HeureDebut, HeureFin, DateCreation)
+            OUTPUT INSERTED.NoEnreg
             VALUES (
-                '${operatorId}',
-                '${lancementCode}',
-                '${codeRubrique}',
-                '${status}',
-                '${phase || 'ADMIN'}',
-                '${status === 'DEBUT' ? 'EN_COURS' : status === 'FIN' ? 'TERMINE' : status}',
+                @operatorId,
+                @lancementCode,
+                @codeRubrique,
+                @status,
+                @phase,
+                @finalStatus,
                 ${status === 'DEBUT' ? 'CAST(GETDATE() AS TIME)' : 'NULL'},
                 ${status === 'FIN' ? 'CAST(GETDATE() AS TIME)' : 'NULL'},
                 CAST(GETDATE() AS DATE)
             )
         `;
         
-        console.log('Requête SQL à exécuter:');
-        console.log(insertQuery);
+        const params = {
+            operatorId,
+            lancementCode,
+            codeRubrique,
+            status,
+            phase: finalPhase,
+            finalStatus
+        };
         
-        await executeQuery(insertQuery);
+        console.log('Requête SQL à exécuter:', insertQuery);
+        console.log('Paramètres:', params);
         
-        console.log('✅ Opération ajoutée avec succès dans ABHISTORIQUE_OPERATEURS');
+        const insertResult = await executeQuery(insertQuery, params);
+        const insertedId = insertResult && insertResult[0] ? insertResult[0].NoEnreg : null;
+        
+        console.log('✅ Opération ajoutée avec succès dans ABHISTORIQUE_OPERATEURS, ID:', insertedId);
         
         // Si c'est une fin de lancement, consolider les temps
         if (status === 'FIN' || status === 'TERMINE') {
@@ -1177,12 +1307,14 @@ router.post('/operations', async (req, res) => {
         
         res.json({
             success: true,
-            message: 'Opération ajoutée avec succès',
+            message: warning ? 'Opération ajoutée avec succès (avec avertissement)' : 'Opération ajoutée avec succès',
+            warning: warning || null,
             data: {
+                id: insertedId,
                 operatorId,
                 lancementCode,
                 phase,
-                lancementInfo: validation.data
+                lancementInfo: lancementInfo
             }
         });
         
@@ -1264,7 +1396,7 @@ router.get('/operators', async (req, res) => {
             const operatorsQuery = `
                 SELECT DISTINCT 
                     COALESCE(s.OperatorCode, h.OperatorCode) as OperatorCode,
-                    COALESCE(r.Designation1, 'Opérateur ' + COALESCE(s.OperatorCode, h.OperatorCode)) as NomOperateur,
+                    COALESCE(r.Designation1, 'Opérateur ' + CAST(COALESCE(s.OperatorCode, h.OperatorCode) AS VARCHAR)) as NomOperateur,
                     s.LoginTime,
                     COALESCE(s.SessionStatus, 'ACTIVE') as SessionStatus,
                     CASE 
@@ -1288,9 +1420,13 @@ router.get('/operators', async (req, res) => {
                     
                     UNION
                     
-                    -- Opérateurs avec lancement en cours
+                    -- Opérateurs avec lancement en cours ET session active (seulement ceux vraiment actifs)
                     SELECT DISTINCT h.OperatorCode, h.DateCreation as LoginTime, 'ACTIVE' as SessionStatus, NULL as DeviceInfo
                     FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS] h
+                    INNER JOIN [SEDI_APP_INDEPENDANTE].[dbo].[ABSESSIONS_OPERATEURS] s 
+                        ON h.OperatorCode = s.OperatorCode 
+                        AND s.SessionStatus = 'ACTIVE'
+                        AND CAST(s.DateCreation AS DATE) = CAST(GETDATE() AS DATE)
                     WHERE h.Statut IN ('EN_COURS', 'EN_PAUSE')
                     AND CAST(h.DateCreation AS DATE) = CAST(GETDATE() AS DATE)
                     AND h.OperatorCode IS NOT NULL
@@ -1466,6 +1602,91 @@ router.post('/cleanup-sessions', async (req, res) => {
     }
 });
 
+// Route pour terminer les opérations orphelines (actives sans opérateur connecté)
+router.post('/cleanup-orphan-operations', async (req, res) => {
+    try {
+        console.log('🧹 Nettoyage des opérations orphelines...');
+        
+        // Trouver les opérations actives sans session active
+        const findOrphanQuery = `
+            SELECT 
+                h.NoEnreg,
+                h.OperatorCode,
+                h.CodeLanctImprod,
+                h.Statut,
+                h.DateCreation,
+                h.HeureDebut
+            FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS] h
+            LEFT JOIN [SEDI_APP_INDEPENDANTE].[dbo].[ABSESSIONS_OPERATEURS] s 
+                ON h.OperatorCode = s.OperatorCode 
+                AND s.SessionStatus = 'ACTIVE'
+                AND CAST(s.DateCreation AS DATE) = CAST(GETDATE() AS DATE)
+            WHERE h.Statut IN ('EN_COURS', 'EN_PAUSE')
+                AND CAST(h.DateCreation AS DATE) = CAST(GETDATE() AS DATE)
+                AND s.OperatorCode IS NULL
+                AND h.OperatorCode IS NOT NULL
+                AND h.OperatorCode != ''
+                AND h.OperatorCode != '0'
+        `;
+        
+        const orphanOperations = await executeQuery(findOrphanQuery);
+        console.log(`🔍 ${orphanOperations.length} opérations orphelines trouvées`);
+        
+        if (orphanOperations.length === 0) {
+            return res.json({
+                success: true,
+                message: 'Aucune opération orpheline trouvée',
+                terminatedCount: 0
+            });
+        }
+        
+        // Terminer ces opérations
+        const terminateQuery = `
+            UPDATE [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
+            SET Statut = 'TERMINE',
+                HeureFin = CAST(GETDATE() AS TIME)
+            WHERE NoEnreg IN (
+                SELECT h.NoEnreg
+                FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS] h
+                LEFT JOIN [SEDI_APP_INDEPENDANTE].[dbo].[ABSESSIONS_OPERATEURS] s 
+                    ON h.OperatorCode = s.OperatorCode 
+                    AND s.SessionStatus = 'ACTIVE'
+                    AND CAST(s.DateCreation AS DATE) = CAST(GETDATE() AS DATE)
+                WHERE h.Statut IN ('EN_COURS', 'EN_PAUSE')
+                    AND CAST(h.DateCreation AS DATE) = CAST(GETDATE() AS DATE)
+                    AND s.OperatorCode IS NULL
+                    AND h.OperatorCode IS NOT NULL
+                    AND h.OperatorCode != ''
+                    AND h.OperatorCode != '0'
+            )
+        `;
+        
+        await executeQuery(terminateQuery);
+        
+        console.log(`✅ ${orphanOperations.length} opérations orphelines terminées`);
+        
+        res.json({
+            success: true,
+            message: `${orphanOperations.length} opération(s) orpheline(s) terminée(s)`,
+            terminatedCount: orphanOperations.length,
+            operations: orphanOperations.map(op => ({
+                id: op.NoEnreg,
+                operatorCode: op.OperatorCode,
+                lancementCode: op.CodeLanctImprod,
+                status: op.Statut
+            }))
+        });
+        
+    } catch (error) {
+        console.error('❌ Erreur lors du nettoyage des opérations orphelines:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Erreur lors du nettoyage des opérations orphelines',
+            details: error.message
+        });
+    }
+});
+
 // Route pour nettoyer les doublons d'opérations
 router.post('/cleanup-duplicates', async (req, res) => {
     try {
@@ -1575,8 +1796,9 @@ router.get('/operators/:operatorCode/operations', async (req, res) => {
                 h.OperatorCode,
                 h.CodeRubrique,
                 h.Statut,
-                h.DateCreation,
-            r.Designation1 as operatorName,
+                h.HeureDebut,
+                h.HeureFin,
+                r.Designation1 as operatorName,
                 l.DesignationLct1 as Article,
                 l.DesignationLct2 as ArticleDetail
             FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS] h
@@ -1588,8 +1810,8 @@ router.get('/operators/:operatorCode/operations', async (req, res) => {
         
         const operatorEvents = await executeQuery(operatorEventsQuery, { operatorCode });
         
-        // Traiter les événements pour regrouper par lancement
-        const processedLancements = processLancementEvents(operatorEvents);
+        // Utiliser la même fonction que getAdminOperations pour la cohérence
+        const processedLancements = processLancementEventsWithPauses(operatorEvents);
         
         // Formater les données pour l'interface opérateur (sans pauseTime)
         const formattedOperations = processedLancements.map(lancement => ({

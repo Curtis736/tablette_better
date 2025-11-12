@@ -98,6 +98,38 @@ class AdminPage {
                     console.log('Listener ajouté: operatorSelect');
                 }
                 
+                // Filtre de statut
+                const statusFilter = document.getElementById('statusFilter');
+                if (statusFilter) {
+                    statusFilter.addEventListener('change', () => {
+                        console.log('🔄 Filtre de statut changé:', statusFilter.value);
+                        this.updateOperationsTable();
+                    });
+                    console.log('Listener ajouté: statusFilter');
+                }
+                
+                // Filtre de recherche
+                const searchFilter = document.getElementById('searchFilter');
+                if (searchFilter) {
+                    searchFilter.addEventListener('input', () => {
+                        console.log('🔄 Filtre de recherche changé:', searchFilter.value);
+                        this.updateOperationsTable();
+                    });
+                    console.log('Listener ajouté: searchFilter');
+                }
+                
+                // Bouton effacer filtres
+                const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+                if (clearFiltersBtn) {
+                    clearFiltersBtn.addEventListener('click', () => {
+                        if (operatorSelect) operatorSelect.value = '';
+                        if (statusFilter) statusFilter.value = '';
+                        if (searchFilter) searchFilter.value = '';
+                        this.loadData();
+                    });
+                    console.log('Listener ajouté: clearFiltersBtn');
+                }
+                
                    // Bouton Transfert
                    const transferBtn = document.getElementById('transferBtn');
                    if (transferBtn) {
@@ -117,11 +149,34 @@ class AdminPage {
                 if (tableBody) {
                     tableBody.addEventListener('click', (e) => {
                         if (e.target.closest('.btn-delete')) {
-                            const id = e.target.closest('.btn-delete').dataset.id;
+                            const btn = e.target.closest('.btn-delete');
+                            const id = btn.dataset.id;
+                            console.log('🗑️ Clic sur bouton supprimer, ID:', id);
                             this.deleteOperation(id);
                         } else if (e.target.closest('.btn-edit')) {
-                            const id = e.target.closest('.btn-edit').dataset.id;
-                            this.editOperation(id);
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const btn = e.target.closest('.btn-edit');
+                            const id = btn.dataset.id;
+                            console.log('✏️ Clic sur bouton modifier détecté');
+                            console.log('🔍 ID récupéré:', id, 'Type:', typeof id);
+                            console.log('🔍 Bouton:', btn);
+                            console.log('🔍 Dataset complet:', btn.dataset);
+                            console.log('🔍 Opérations disponibles:', this.operations.length);
+                            console.log('🔍 IDs disponibles:', this.operations.map(op => ({ id: op.id, type: typeof op.id })));
+                            
+                            if (!id) {
+                                console.error('❌ ID manquant sur le bouton!');
+                                this.notificationManager.error('Erreur: ID manquant sur le bouton d\'édition');
+                                return;
+                            }
+                            
+                            try {
+                                this.editOperation(id);
+                            } catch (error) {
+                                console.error('❌ Erreur lors de l\'édition:', error);
+                                this.notificationManager.error(`Erreur lors de l'édition: ${error.message}`);
+                            }
                         }
                     });
                     console.log('Listener ajouté: operationsTableBody');
@@ -136,9 +191,14 @@ class AdminPage {
         
         // Actualisation automatique avec retry en cas d'erreur
         // Auto-refresh plus fréquent pour les mises à jour temps réel
+        this.lastEditTime = 0; // Timestamp de la dernière édition pour éviter le rechargement immédiat
         this.refreshInterval = setInterval(() => {
-            if (!this.isLoading) {
+            // Ne pas recharger si une édition vient d'être effectuée (dans les 5 dernières secondes)
+            const timeSinceLastEdit = Date.now() - this.lastEditTime;
+            if (!this.isLoading && timeSinceLastEdit > 5000) {
                 this.loadDataWithRetry();
+            } else if (timeSinceLastEdit <= 5000) {
+                console.log(`⏸️ Rechargement automatique ignoré (édition récente il y a ${Math.round(timeSinceLastEdit/1000)}s)`);
             }
         }, 10000); // Toutes les 10 secondes au lieu de 60
 
@@ -159,8 +219,10 @@ class AdminPage {
             this.isLoading = true;
             
             // Charger les opérateurs connectés et les données admin en parallèle
+            // Utiliser la date du jour pour récupérer les données
+            const today = new Date().toISOString().split('T')[0];
             const [adminData, operatorsData] = await Promise.all([
-                this.apiService.getAdminData(),
+                this.apiService.getAdminData(today),
                 this.apiService.getConnectedOperators()
             ]);
             
@@ -170,7 +232,7 @@ class AdminPage {
             console.log('DONNEES BRUTES:', data);
             console.log('OPERATEURS CONNECTES:', operatorsData);
             
-            if (data.operations) {
+            if (data && data.operations) {
                 this.operations = data.operations;
                 this.pagination = data.pagination;
                 console.log('OPERATIONS ASSIGNEES:', this.operations.length);
@@ -181,16 +243,24 @@ class AdminPage {
                 this.pagination = null;
             }
             
-            if (data.stats) {
+            if (data && data.stats) {
                 this.stats = data.stats;
                 console.log('STATS ASSIGNEES:', this.stats);
             } else {
-                console.log('PAS DE STATS DANS LA REPONSE');
-                this.stats = {};
+                console.log('PAS DE STATS DANS LA REPONSE - Utilisation des valeurs par défaut');
+                this.stats = {
+                    totalOperators: 0,
+                    activeLancements: 0,
+                    pausedLancements: 0,
+                    completedLancements: 0
+                };
             }
             
             // Mettre à jour le menu déroulant des opérateurs
-            if (operatorsData.success && operatorsData.operators) {
+            if (operatorsData && operatorsData.success && operatorsData.operators) {
+                this.updateOperatorSelect(operatorsData.operators);
+            } else if (operatorsData && operatorsData.operators) {
+                // Fallback si success n'est pas défini
                 this.updateOperatorSelect(operatorsData.operators);
             }
             
@@ -255,10 +325,27 @@ class AdminPage {
     }
 
     updateStats() {
-        this.totalOperators.textContent = this.stats.totalOperators || 0;
-        this.activeLancements.textContent = this.stats.activeLancements || 0;
-        this.pausedLancements.textContent = this.stats.pausedLancements || 0;
-        this.completedLancements.textContent = this.stats.completedLancements || 0;
+        // Vérifier que les éléments existent avant de les mettre à jour
+        if (this.totalOperators) {
+            this.totalOperators.textContent = this.stats.totalOperators || 0;
+        }
+        if (this.activeLancements) {
+            this.activeLancements.textContent = this.stats.activeLancements || 0;
+        }
+        if (this.pausedLancements) {
+            this.pausedLancements.textContent = this.stats.pausedLancements || 0;
+        }
+        if (this.completedLancements) {
+            this.completedLancements.textContent = this.stats.completedLancements || 0;
+        }
+        
+        // Log pour debug
+        console.log('📊 Statistiques mises à jour:', {
+            totalOperators: this.stats.totalOperators || 0,
+            activeLancements: this.stats.activeLancements || 0,
+            pausedLancements: this.stats.pausedLancements || 0,
+            completedLancements: this.stats.completedLancements || 0
+        });
     }
 
     showNoDataMessage() {
@@ -439,19 +526,29 @@ class AdminPage {
             // Charger les lancements de l'opérateur spécifique
             try {
                 this.isLoading = true;
-                const data = await this.apiService.get(`/admin/operators/${selectedOperator}/operations`);
+                const endpoint = `/admin/operators/${selectedOperator}/operations`;
+                console.log(`📡 Requête API: ${this.apiService.baseUrl}${endpoint}`);
                 
-                if (data.success) {
-                    console.log(`📊 ${data.count} lancements trouvés pour l'opérateur ${selectedOperator}`);
-                    this.operations = data.operations;
+                const data = await this.apiService.get(endpoint);
+                
+                if (data && data.success) {
+                    console.log(`📊 ${data.count || data.operations?.length || 0} lancements trouvés pour l'opérateur ${selectedOperator}`);
+                    this.operations = data.operations || [];
                     this.updateOperationsTable();
                 } else {
-                    console.error('Erreur lors du chargement des lancements:', data.error);
-                    this.notificationManager.error('Erreur lors du chargement des lancements');
+                    const errorMsg = data?.error || 'Données invalides reçues du serveur';
+                    console.error('Erreur lors du chargement des lancements:', errorMsg);
+                    this.notificationManager.error(`Erreur: ${errorMsg}`);
                 }
             } catch (error) {
                 console.error('Erreur lors du chargement des lancements:', error);
-                this.notificationManager.error('Erreur de connexion au serveur');
+                const errorMessage = error.message || 'Erreur de connexion au serveur';
+                console.error('Détails de l\'erreur:', {
+                    message: error.message,
+                    stack: error.stack,
+                    apiBaseUrl: this.apiService?.baseUrl
+                });
+                this.notificationManager.error(`Erreur de connexion: ${errorMessage}`);
             } finally {
                 this.isLoading = false;
             }
@@ -484,14 +581,34 @@ class AdminPage {
             const result = await this.apiService.post('/admin/operations', newOperation);
             
             if (result.success) {
-                this.notificationManager.success('Opération ajoutée avec succès');
+                if (result.warning) {
+                    this.notificationManager.warning(result.warning);
+                    console.warn('⚠️ Avertissement:', result.warning);
+                } else {
+                    this.notificationManager.success(result.message || 'Opération ajoutée avec succès');
+                }
                 console.log('Opération ajoutée:', result);
                 
+                // Attendre un peu pour que le backend ait fini de traiter
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
                 // Recharger les données pour afficher la nouvelle ligne
-                this.loadData();
+                await this.loadData();
             } else {
-                this.notificationManager.error(`Erreur lors de l'ajout : ${result.error}`);
+                const errorMessage = result.error || 'Erreur inconnue lors de l\'ajout';
+                this.notificationManager.error(`Erreur lors de l'ajout : ${errorMessage}`);
                 console.error('Erreur d\'ajout:', result);
+                
+                // Si le lancement n'existe pas, suggérer de le créer
+                if (errorMessage.includes('n\'existe pas dans la base de données')) {
+                    const createLancement = confirm(
+                        `${errorMessage}\n\nVoulez-vous créer le lancement dans LCTE maintenant ?`
+                    );
+                    if (createLancement) {
+                        // TODO: Ouvrir un formulaire pour créer le lancement
+                        console.log('Création du lancement demandée');
+                    }
+                }
             }
             
         } catch (error) {
@@ -531,7 +648,7 @@ class AdminPage {
 
     updateOperationsTable() {
         console.log('🔄 DEBUT updateOperationsTable()');
-        console.log('📊 OPERATIONS A AFFICHER:', this.operations.length);
+        console.log('📊 OPERATIONS TOTALES:', this.operations.length);
         console.log('📋 TABLEAU BODY:', this.operationsTableBody);
         
         if (!this.operationsTableBody) {
@@ -539,15 +656,97 @@ class AdminPage {
             return;
         }
         
+        // Appliquer les filtres
+        let filteredOperations = [...this.operations];
+        
+        // Filtre de statut
+        const statusFilter = document.getElementById('statusFilter');
+        if (statusFilter && statusFilter.value) {
+            const selectedStatus = statusFilter.value;
+            console.log('🔍 Filtrage par statut:', selectedStatus);
+            filteredOperations = filteredOperations.filter(op => {
+                // Comparer avec statusCode ou status
+                const opStatus = (op.statusCode || op.status || '').toUpperCase();
+                const selectedStatusUpper = selectedStatus.toUpperCase();
+                
+                // Correspondance exacte
+                if (opStatus === selectedStatusUpper) {
+                    return true;
+                }
+                
+                // Gestion spéciale pour "PAUSE" et "EN_PAUSE"
+                if (selectedStatusUpper === 'PAUSE' || selectedStatusUpper === 'EN_PAUSE') {
+                    return opStatus === 'EN_PAUSE' || opStatus === 'PAUSE';
+                }
+                
+                // Gestion spéciale pour "EN_COURS"
+                if (selectedStatusUpper === 'EN_COURS') {
+                    return opStatus === 'EN_COURS';
+                }
+                
+                return false;
+            });
+            console.log(`📊 Après filtrage statut: ${filteredOperations.length} opérations`);
+        }
+        
+        // Filtre de recherche (code lancement)
+        const searchFilter = document.getElementById('searchFilter');
+        if (searchFilter && searchFilter.value.trim()) {
+            const searchTerm = searchFilter.value.trim().toLowerCase();
+            console.log('🔍 Filtrage par recherche:', searchTerm);
+            filteredOperations = filteredOperations.filter(op => {
+                const lancementCode = (op.lancementCode || '').toLowerCase();
+                return lancementCode.includes(searchTerm);
+            });
+            console.log(`📊 Après filtrage recherche: ${filteredOperations.length} opérations`);
+        }
+        
         this.operationsTableBody.innerHTML = '';
         console.log('🧹 TABLEAU VIDE');
         
-        if (this.operations.length === 0) {
-            console.log('⚠️ AUCUNE OPERATION - AFFICHAGE MESSAGE');
+        // Déterminer le message à afficher si aucune opération
+        let emptyMessage = '';
+        let emptySubMessage = '';
+        
+        if (filteredOperations.length === 0) {
+            console.log('⚠️ AUCUNE OPERATION APRES FILTRAGE - AFFICHAGE MESSAGE');
+            
+            // Message personnalisé selon les filtres actifs
+            if (statusFilter && statusFilter.value) {
+                const statusLabels = {
+                    'EN_COURS': 'en cours',
+                    'PAUSE': 'en pause',
+                    'EN_PAUSE': 'en pause',
+                    'TERMINE': 'terminés',
+                    'PAUSE_TERMINEE': 'en pause terminée'
+                };
+                const statusLabel = statusLabels[statusFilter.value] || statusFilter.value.toLowerCase();
+                emptyMessage = 'Aucun lancement trouvé';
+                emptySubMessage = `Il n'y a pas de lancements ${statusLabel} pour la période sélectionnée`;
+            } else if (searchFilter && searchFilter.value.trim()) {
+                emptyMessage = 'Aucun lancement trouvé';
+                emptySubMessage = `Aucun lancement ne correspond à "${searchFilter.value.trim()}"`;
+            } else if (this.operations.length === 0) {
+                emptyMessage = 'Aucune opération trouvée';
+                emptySubMessage = 'Il n\'y a pas d\'opérations pour la date sélectionnée';
+            } else {
+                emptyMessage = 'Aucun lancement trouvé';
+                emptySubMessage = 'Aucune opération ne correspond aux filtres sélectionnés';
+            }
+            
             const row = document.createElement('tr');
+            row.className = 'empty-state-row';
             row.innerHTML = `
-                <td colspan="8" style="text-align: center; padding: 2rem; color: #666;">
-                    Aucune opération trouvée pour cette date
+                <td colspan="7" class="empty-state">
+                    <div style="text-align: center; padding: 3rem 2rem;">
+                        <i class="fas fa-inbox" style="font-size: 3rem; color: #ccc; margin-bottom: 1rem; display: block;"></i>
+                        <p style="font-size: 1.1rem; color: #666; margin: 0.5rem 0; font-weight: 500;">
+                            ${emptyMessage}
+                        </p>
+                        <p style="font-size: 0.9rem; color: #999; margin: 0;">
+                            ${emptySubMessage}
+                        </p>
+                    </div>
                 </td>
             `;
             this.operationsTableBody.appendChild(row);
@@ -555,10 +754,13 @@ class AdminPage {
             return;
         }
         
-        console.log('🔄 CREATION DES LIGNES POUR', this.operations.length, 'OPERATIONS');
-        console.log('📋 DONNEES COMPLETES DES OPERATIONS:', this.operations);
+        // Utiliser les opérations filtrées pour l'affichage
+        const operationsToDisplay = filteredOperations;
         
-        this.operations.forEach((operation, index) => {
+        console.log('🔄 CREATION DES LIGNES POUR', operationsToDisplay.length, 'OPERATIONS');
+        console.log('📋 DONNEES COMPLETES DES OPERATIONS:', operationsToDisplay);
+        
+        operationsToDisplay.forEach((operation, index) => {
             // Debug pour voir les données reçues
             console.log(`🔍 Opération ${index + 1}:`, {
                 id: operation.id,
@@ -624,10 +826,10 @@ class AdminPage {
                     <span class="status-badge status-${operation.statusCode}">${operation.status}</span>
                 </td>
                 <td class="actions-cell">
-                    <button class="btn-edit" data-id="${operation.id}" title="Modifier">
+                    <button class="btn-edit" data-id="${operation.id}" data-operation-id="${operation.id}" title="Modifier" type="button">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button class="btn-delete" data-id="${operation.id}" title="Supprimer">
+                    <button class="btn-delete" data-id="${operation.id}" data-operation-id="${operation.id}" title="Supprimer" type="button">
                         <i class="fas fa-trash"></i>
                     </button>
                 </td>
@@ -1030,26 +1232,80 @@ class AdminPage {
     }
 
     editOperation(id) {
-        console.log('🔧 Édition de l\'opération:', id);
+        console.log('🔧 Édition de l\'opération:', id, 'Type:', typeof id);
         
-        // Trouver la ligne correspondante
-        const button = document.querySelector(`button[data-id="${id}"]`);
-        if (!button) {
-            console.error('Bouton non trouvé pour l\'ID:', id);
-            return;
-        }
-        const row = button.closest('tr');
+        // Convertir l'ID en nombre si nécessaire pour la comparaison
+        const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
+        
+        // Trouver la ligne correspondante - essayer plusieurs méthodes
+        let row = document.querySelector(`tr[data-operation-id="${id}"]`);
         if (!row) {
-            console.error('Ligne non trouvée pour l\'ID:', id);
+            row = document.querySelector(`tr[data-operation-id="${numericId}"]`);
+        }
+        if (!row) {
+            // Essayer de trouver via le bouton
+            const button = document.querySelector(`button.btn-edit[data-id="${id}"]`) || 
+                          document.querySelector(`button.btn-edit[data-id="${numericId}"]`);
+            if (button) {
+                row = button.closest('tr');
+            }
+        }
+        
+        if (!row) {
+            console.error('❌ Ligne non trouvée pour l\'ID:', id);
+            console.log('🔍 Opérations disponibles:', this.operations.map(op => ({ id: op.id, type: typeof op.id })));
+            console.log('🔍 Lignes dans le tableau:', Array.from(document.querySelectorAll('tr[data-operation-id]')).map(tr => ({
+                id: tr.getAttribute('data-operation-id'),
+                buttons: Array.from(tr.querySelectorAll('button.btn-edit')).map(btn => btn.getAttribute('data-id'))
+            })));
+            this.notificationManager.warning(`Ligne non trouvée pour l'opération ${id}. Rechargement du tableau...`);
+            this.loadData();
             return;
         }
         
-        // Trouver l'opération dans les données
-        const operation = this.operations.find(op => op.id == id);
+        // Trouver l'opération dans les données - essayer avec l'ID original et numérique
+        console.log('🔍 Recherche de l\'opération avec ID:', id, 'ou', numericId);
+        console.log('🔍 Opérations dans this.operations:', this.operations.length);
+        console.log('🔍 IDs disponibles:', this.operations.map(op => ({ 
+            id: op.id, 
+            type: typeof op.id,
+            lancementCode: op.lancementCode 
+        })));
+        
+        let operation = this.operations.find(op => {
+            const match = op.id == id || op.id == numericId || String(op.id) === String(id) || String(op.id) === String(numericId);
+            if (match) {
+                console.log('✅ Opération trouvée avec correspondance:', {
+                    opId: op.id,
+                    opIdType: typeof op.id,
+                    searchId: id,
+                    searchIdType: typeof id,
+                    numericId: numericId
+                });
+            }
+            return match;
+        });
+        
         if (!operation) {
-            console.error('Opération non trouvée pour l\'ID:', id);
+            console.error('❌ Opération non trouvée pour l\'ID:', id);
+            console.log('🔍 Toutes les opérations:', this.operations);
+            console.log('🔍 Comparaisons testées:', {
+                'op.id == id': this.operations.map(op => ({ id: op.id, match: op.id == id })),
+                'op.id == numericId': this.operations.map(op => ({ id: op.id, match: op.id == numericId })),
+                'String(op.id) === String(id)': this.operations.map(op => ({ id: op.id, match: String(op.id) === String(id) })),
+                'String(op.id) === String(numericId)': this.operations.map(op => ({ id: op.id, match: String(op.id) === String(numericId) }))
+            });
+            this.notificationManager.warning(`Opération ${id} non trouvée dans les données. Rechargement...`);
+            this.loadData();
             return;
         }
+        
+        console.log('✅ Opération trouvée:', operation);
+        console.log('✅ Ligne trouvée:', row);
+        console.log('🔍 Structure de la ligne:', {
+            cellCount: row.querySelectorAll('td').length,
+            innerHTML: row.innerHTML.substring(0, 200)
+        });
         
         // Sauvegarder et nettoyer les valeurs originales
         const originalStartTime = this.cleanTimeValue(operation.startTime || '');
@@ -1062,6 +1318,19 @@ class AdminPage {
         
         // Remplacer les cellules par des inputs
         const cells = row.querySelectorAll('td');
+        
+        if (cells.length < 7) {
+            console.error(`❌ Nombre de cellules insuffisant: ${cells.length} (attendu: 7)`);
+            console.log('🔍 Cellules trouvées:', Array.from(cells).map((cell, idx) => ({
+                index: idx,
+                content: cell.textContent.trim().substring(0, 50)
+            })));
+            this.notificationManager.error(`Erreur: La ligne a ${cells.length} cellules au lieu de 7. Rechargement...`);
+            this.loadData();
+            return;
+        }
+        
+        console.log(`✅ ${cells.length} cellules trouvées, structure correcte`);
         
         // Heure Début (index 3)
         const startTimeCell = cells[3];
@@ -1308,6 +1577,7 @@ class AdminPage {
             // Vérifier si les valeurs ont vraiment changé
             const startTimeChanged = startTimeInput.value !== originalStartTime;
             const endTimeChanged = endTimeInput.value !== originalEndTime;
+            const statusChanged = statusSelect ? (statusSelect.value !== originalStatus) : false;
             
             console.log(`🔧 Comparaison des valeurs pour ${id}:`, {
                 startTime: {
@@ -1319,11 +1589,16 @@ class AdminPage {
                     original: originalEndTime,
                     current: endTimeInput.value,
                     changed: endTimeChanged
+                },
+                status: {
+                    original: originalStatus,
+                    current: statusSelect ? statusSelect.value : 'N/A',
+                    changed: statusChanged
                 }
             });
             
             // Si aucune valeur n'a changé, ne pas envoyer de requête
-            if (!startTimeChanged && !endTimeChanged) {
+            if (!startTimeChanged && !endTimeChanged && !statusChanged) {
                 console.log(`ℹ️ Aucune modification détectée pour l'opération ${id}`);
                 this.notificationManager.info('Aucune modification détectée');
                 this.loadData(); // Recharger pour revenir à l'état normal
@@ -1353,6 +1628,12 @@ class AdminPage {
                 }
             }
             
+            // Ajouter le statut s'il a changé
+            if (statusChanged && statusSelect) {
+                updateData.status = statusSelect.value;
+                console.log(`🔧 Statut changé: ${originalStatus} → ${statusSelect.value}`);
+            }
+            
             // Validation de cohérence des heures
             if (updateData.startTime && updateData.endTime) {
                 if (!this.validateTimeConsistency(updateData.startTime, updateData.endTime)) {
@@ -1366,8 +1647,27 @@ class AdminPage {
             
             if (response.success) {
                 this.notificationManager.success('Opération mise à jour avec succès');
+                
+                // Enregistrer le temps de la dernière édition pour éviter le rechargement automatique
+                this.lastEditTime = Date.now();
+                
+                // Mettre à jour en mémoire AVANT de mettre à jour l'affichage
                 this.updateOperationInMemory(id, updateData);
+                
+                // Vérifier que la mise à jour en mémoire a bien fonctionné
+                const updatedOperation = this.operations.find(op => op.id == id);
+                console.log('🔍 Opération après mise à jour en mémoire:', updatedOperation);
+                console.log('🔍 Statut après mise à jour:', updatedOperation?.statusCode, updatedOperation?.status);
+                
+                // Mettre à jour l'affichage
                 this.updateSingleRowInTable(id);
+                
+                // Vérifier que l'affichage a bien été mis à jour
+                const rowAfterUpdate = document.querySelector(`tr[data-operation-id="${id}"]`);
+                if (rowAfterUpdate) {
+                    const statusCell = rowAfterUpdate.querySelectorAll('td')[5];
+                    console.log('🔍 Statut affiché après updateSingleRowInTable:', statusCell?.innerHTML);
+                }
             } else {
                 const errorMessage = response.error || 'Erreur lors de la mise à jour';
                 this.notificationManager.error(`Erreur: ${errorMessage}`);
@@ -1410,6 +1710,21 @@ class AdminPage {
             console.log(`✅ endTime mis à jour: ${operation.endTime}`);
         }
         
+        // Mettre à jour le statut si modifié
+        if (updateData.status !== undefined) {
+            operation.statusCode = updateData.status;
+            // Mettre à jour aussi le label du statut
+            const statusLabels = {
+                'EN_COURS': 'En cours',
+                'EN_PAUSE': 'En pause',
+                'TERMINE': 'Terminé',
+                'PAUSE_TERMINEE': 'Pause terminée',
+                'FORCE_STOP': 'Arrêt forcé'
+            };
+            operation.status = statusLabels[updateData.status] || updateData.status;
+            console.log(`✅ Statut mis à jour: ${operation.statusCode} (${operation.status})`);
+        }
+        
         // Mettre à jour le timestamp de dernière modification
         operation.lastUpdate = new Date().toISOString();
         
@@ -1433,9 +1748,9 @@ class AdminPage {
             return;
         }
         
-        // Mettre à jour les cellules d'heures
+        // Mettre à jour les cellules d'heures et statut
         const cells = existingRow.querySelectorAll('td');
-        if (cells.length >= 5) {
+        if (cells.length >= 6) {
             // Cellule heure début (index 3)
             const formattedStartTime = this.formatDateTime(operation.startTime);
             cells[3].innerHTML = formattedStartTime;
@@ -1444,7 +1759,37 @@ class AdminPage {
             const formattedEndTime = this.formatDateTime(operation.endTime);
             cells[4].innerHTML = formattedEndTime;
             
-            console.log(`✅ Ligne ${operationId} mise à jour: ${formattedStartTime} -> ${formattedEndTime}`);
+            // Cellule statut (index 5)
+            // Utiliser le statut de l'opération, mais ne pas utiliser 'EN_COURS' par défaut si le statut est explicitement défini
+            let statusCode = operation.statusCode;
+            let statusLabel = operation.status;
+            
+            // Si le statut n'est pas défini, utiliser 'EN_COURS' seulement si c'est vraiment nécessaire
+            if (!statusCode && operation.status) {
+                // Essayer de déduire le statusCode depuis le status label
+                const statusMap = {
+                    'En cours': 'EN_COURS',
+                    'En pause': 'EN_PAUSE',
+                    'Terminé': 'TERMINE',
+                    'Pause terminée': 'PAUSE_TERMINEE',
+                    'Arrêt forcé': 'FORCE_STOP'
+                };
+                statusCode = statusMap[operation.status] || 'EN_COURS';
+            } else if (!statusCode) {
+                statusCode = 'EN_COURS';
+                statusLabel = 'En cours';
+            }
+            
+            console.log(`🔍 Mise à jour statut pour ${operationId}:`, {
+                statusCode: statusCode,
+                statusLabel: statusLabel,
+                operationStatusCode: operation.statusCode,
+                operationStatus: operation.status
+            });
+            
+            cells[5].innerHTML = `<span class="status-badge status-${statusCode}">${statusLabel}</span>`;
+            
+            console.log(`✅ Ligne ${operationId} mise à jour: ${formattedStartTime} -> ${formattedEndTime}, statut: ${statusCode} (${statusLabel})`);
         } else {
             console.error(`❌ Pas assez de cellules dans la ligne ${operationId}: ${cells.length}`);
         }
