@@ -75,3 +75,14 @@ else
     sudo journalctl -u docker -n 20 --no-pager | grep -i dns || echo "   (aucun log DNS trouvé)"
 fi
 
+
+
+
+
+
+
+
+
+
+
+

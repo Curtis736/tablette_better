@@ -92,8 +92,14 @@ class StorageService {
     }
 
     getDefaultSettings() {
+        // Utiliser une URL relative pour éviter les problèmes de connexion
+        // L'ApiService gère la détection de l'environnement
+        const currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+        const currentHost = window.location.hostname;
+        const isLocalDev = (currentHost === 'localhost' || currentHost === '127.0.0.1') && currentPort === '8080';
+        
         return {
-            apiUrl: 'http://localhost:3001/api',
+            apiUrl: isLocalDev ? 'http://localhost:3033/api' : `${window.location.protocol}//${window.location.host}/api`,
             timeout: 30000,
             retryAttempts: 3,
             cacheEnabled: true,

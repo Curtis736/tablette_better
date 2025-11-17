@@ -7,6 +7,8 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📱</text></svg>">
     <link rel="stylesheet" href="assets/styles.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- QuaggaJS pour le scan de code-barres -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 </head>
 <body>
     <div id="app">
@@ -86,10 +88,13 @@
                     <div class="input-group">
                         <i class="fas fa-barcode"></i>
                         <input type="text" id="lancementSearch" placeholder="Saisir le code de lancement..." autocomplete="off" value="LT">
+                        <button id="scanBarcodeBtn" class="btn-scan" title="Scanner un code-barres">
+                            <i class="fas fa-camera"></i>
+                        </button>
                     </div>
                     <div id="lancementList" class="lancement-list" style="display: none;"></div>
                     <div class="help-text">
-                        <small><i class="fas fa-info-circle"></i> "LT" est pré-rempli, saisissez seulement les chiffres (ex: LT2501145)</small>
+                        <small><i class="fas fa-info-circle"></i> "LT" est pré-rempli, saisissez seulement les chiffres (ex: LT2501145) ou utilisez le scanner</small>
                     </div>
                 </div>
 
@@ -322,7 +327,139 @@
                     </div>
                 </div>
 
+                <!-- Log Viewer Section -->
+                <div id="logViewerContainer" class="log-viewer-section">
+                    <h3><i class="fas fa-file-alt"></i> Analyseur de Logs</h3>
+                    
+                    <div class="log-viewer-input">
+                        <div class="log-input-header">
+                            <label for="logTextarea">
+                                <i class="fas fa-paste"></i> Collez vos logs ici (format nginx)
+                            </label>
+                            <div class="log-input-actions">
+                                <button id="parseLogsBtn" class="btn-primary">
+                                    <i class="fas fa-search"></i> Analyser les logs
+                                </button>
+                                <button id="clearLogsBtn" class="btn-secondary">
+                                    <i class="fas fa-times"></i> Effacer
+                                </button>
+                            </div>
+                        </div>
+                        <textarea id="logTextarea" class="log-textarea" placeholder="Collez vos logs d'accès ici (format nginx combined)..."></textarea>
+                    </div>
+
+                    <div class="log-viewer-filters">
+                        <h4><i class="fas fa-filter"></i> Filtres</h4>
+                        <div class="log-filters-grid">
+                            <div class="log-filter-item">
+                                <label>IP:</label>
+                                <input type="text" id="logFilterIP" class="log-filter-input" placeholder="Filtrer par IP">
+                            </div>
+                            <div class="log-filter-item">
+                                <label>Statut:</label>
+                                <select id="logFilterStatus" class="log-filter-select">
+                                    <option value="">Tous</option>
+                                    <option value="200">200 OK</option>
+                                    <option value="304">304 Not Modified</option>
+                                    <option value="400">400 Bad Request</option>
+                                    <option value="404">404 Not Found</option>
+                                    <option value="500">500 Server Error</option>
+                                </select>
+                            </div>
+                            <div class="log-filter-item">
+                                <label>Méthode:</label>
+                                <select id="logFilterMethod" class="log-filter-select">
+                                    <option value="">Toutes</option>
+                                    <option value="GET">GET</option>
+                                    <option value="POST">POST</option>
+                                    <option value="PUT">PUT</option>
+                                    <option value="DELETE">DELETE</option>
+                                </select>
+                            </div>
+                            <div class="log-filter-item">
+                                <label>Chemin:</label>
+                                <input type="text" id="logFilterPath" class="log-filter-input" placeholder="Filtrer par chemin">
+                            </div>
+                            <div class="log-filter-item">
+                                <label>Recherche:</label>
+                                <input type="text" id="logFilterSearch" class="log-filter-input" placeholder="Recherche globale">
+                            </div>
+                            <div class="log-filter-item">
+                                <button id="clearLogFiltersBtn" class="btn-secondary">
+                                    <i class="fas fa-times"></i> Effacer filtres
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="log-viewer-tabs">
+                        <button id="logStatsTab" class="log-tab active">
+                            <i class="fas fa-chart-bar"></i> Statistiques
+                        </button>
+                        <button id="logListTab" class="log-tab">
+                            <i class="fas fa-list"></i> Liste des logs
+                        </button>
+                        <span id="logsCount" class="logs-count">0 log(s) affiché(s)</span>
+                    </div>
+
+                    <div id="logStatsContainer" class="log-stats-container">
+                        <!-- Stats will be displayed here -->
+                    </div>
+
+                    <div class="log-viewer-results">
+                        <div class="table-container">
+                            <table id="logsTable" class="logs-table">
+                                <thead>
+                                    <tr>
+                                        <th>IP</th>
+                                        <th>Timestamp</th>
+                                        <th>Méthode</th>
+                                        <th>Chemin</th>
+                                        <th>Statut</th>
+                                        <th>Taille</th>
+                                        <th>User Agent</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="logsTableBody">
+                                    <tr>
+                                        <td colspan="8" class="no-data">
+                                            <i class="fas fa-inbox"></i>
+                                            <p>Aucun log à afficher. Collez des logs et cliquez sur "Analyser les logs".</p>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
             </main>
+        </div>
+    </div>
+
+    <!-- Modal pour le scanner de code-barres -->
+    <div id="barcodeScannerModal" class="scanner-modal" style="display: none;">
+        <div class="scanner-modal-content">
+            <div class="scanner-modal-header">
+                <h2><i class="fas fa-camera"></i> Scanner un code-barres</h2>
+                <button id="closeScannerBtn" class="btn-close-scanner">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="scanner-modal-body">
+                <div id="scannerContainer" class="scanner-container">
+                    <div id="scannerViewport" class="scanner-viewport"></div>
+                    <div class="scanner-overlay">
+                        <div class="scanner-line"></div>
+                        <p class="scanner-instructions">Positionnez le code-barres dans le cadre</p>
+                    </div>
+                </div>
+                <div id="scannerStatus" class="scanner-status">
+                    <i class="fas fa-circle-notch fa-spin"></i>
+                    <span>Initialisation de la caméra...</span>
+                </div>
+            </div>
         </div>
     </div>
 

@@ -9,7 +9,7 @@ scrape_configs:
   # Métriques de l'application SEDI Tablette
   - job_name: 'sedi-tablette-backend'
     static_configs:
-      - targets: ['sedi-backend:3001']
+      - targets: ['sedi-tablette-backend:3001']
         labels:
           service: 'sedi-tablette'
           instance: 'backend'

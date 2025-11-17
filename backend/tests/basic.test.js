@@ -35,3 +35,19 @@ describe('SEDI Tablette - Tests de configuration', () => {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

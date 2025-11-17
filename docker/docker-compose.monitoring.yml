@@ -15,7 +15,7 @@ services:
       - '--storage.tsdb.retention.time=30d'
       - '--web.enable-lifecycle'
     networks:
-      - sedi-network
+      - sedi-tablette-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
@@ -38,14 +38,15 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_ROOT_URL=http://localhost:3002
+      - GF_SERVER_ROOT_URL=http://192.168.1.26:8080/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
       - GF_INSTALL_PLUGINS=
       - GF_SECURITY_SECRET_KEY=sedi-grafana-secret-key-change-in-production
       - GF_AUTH_ANONYMOUS_ENABLED=false
       - GF_AUTH_BASIC_ENABLED=true
       - GF_AUTH_DISABLE_LOGIN_FORM=false
     networks:
-      - sedi-network
+      - sedi-tablette-network
     restart: unless-stopped
     depends_on:
       - prometheus
@@ -57,9 +58,8 @@ services:
       start_period: 40s
 
 networks:
-  sedi-network:
+  sedi-tablette-network:
     external: true
-    name: sedi-tablette-network
 
 volumes:
   prometheus_data:

@@ -184,14 +184,36 @@ async function performStartupCleanup() {
     try {
         console.log('🧹 Nettoyage automatique au démarrage...');
         
-        // Nettoyer les sessions expirées
         const { executeQuery } = require('./config/database');
+        
+        // Nettoyer les sessions expirées
         const cleanupSessionsQuery = `
             DELETE FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABSESSIONS_OPERATEURS]
             WHERE DateCreation < DATEADD(hour, -24, GETDATE())
         `;
         await executeQuery(cleanupSessionsQuery);
         console.log('✅ Sessions expirées nettoyées');
+        
+        // Terminer les opérations actives sans session active (orphelines)
+        console.log('🔍 Recherche des opérations orphelines (actives sans opérateur connecté)...');
+        const orphanOperationsQuery = `
+            UPDATE h
+            SET h.Statut = 'TERMINE',
+                h.HeureFin = CAST(GETDATE() AS TIME)
+            FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS] h
+            LEFT JOIN [SEDI_APP_INDEPENDANTE].[dbo].[ABSESSIONS_OPERATEURS] s 
+                ON h.OperatorCode = s.OperatorCode 
+                AND s.SessionStatus = 'ACTIVE'
+                AND CAST(s.DateCreation AS DATE) = CAST(GETDATE() AS DATE)
+            WHERE h.Statut IN ('EN_COURS', 'EN_PAUSE')
+                AND CAST(h.DateCreation AS DATE) = CAST(GETDATE() AS DATE)
+                AND s.OperatorCode IS NULL
+                AND h.OperatorCode IS NOT NULL
+                AND h.OperatorCode != ''
+                AND h.OperatorCode != '0'
+        `;
+        const orphanResult = await executeQuery(orphanOperationsQuery);
+        console.log('✅ Opérations orphelines terminées automatiquement');
         
         // Nettoyer les doublons d'opérations
         const duplicatesQuery = `
@@ -233,18 +255,56 @@ function startPeriodicCleanup() {
 }
 
 if (shouldStartServer()) {
-    // Utiliser le port 3033 pour le développement local
+    // Utiliser le port 3033 pour le développement local, sinon utiliser PORT (3001)
     const devPort = process.env.NODE_ENV === 'development' ? 3033 : PORT;
-    server = app.listen(devPort, async () => {
-        console.log(`🚀 Serveur SEDI Tablette démarré sur le port ${devPort}`);
-        console.log(`📊 Interface admin: http://localhost:${devPort}/api/admin`);
-        console.log(`🔍 Santé: http://localhost:${devPort}/api/health`);
-        
-        // Effectuer le nettoyage automatique au démarrage
-        await performStartupCleanup();
-        
-        // Démarrer le nettoyage périodique
-        startPeriodicCleanup();
+    
+    // Fonction pour démarrer le serveur avec gestion d'erreur de port occupé
+    const startServer = async (port) => {
+        return new Promise((resolve, reject) => {
+            const serverInstance = app.listen(port, async () => {
+                console.log(`🚀 Serveur SEDI Tablette démarré sur le port ${port}`);
+                console.log(`📊 Interface admin: http://localhost:${port}/api/admin`);
+                console.log(`🔍 Santé: http://localhost:${port}/api/health`);
+                
+                // Effectuer le nettoyage automatique au démarrage
+                await performStartupCleanup();
+                
+                // Démarrer le nettoyage périodique
+                startPeriodicCleanup();
+                
+                resolve(serverInstance);
+            });
+            
+            serverInstance.on('error', (err) => {
+                if (err.code === 'EADDRINUSE') {
+                    console.error(`❌ Le port ${port} est déjà utilisé.`);
+                    console.log(`💡 Tentative d'arrêt du processus utilisant le port ${port}...`);
+                    reject(err);
+                } else {
+                    reject(err);
+                }
+            });
+        });
+    };
+    
+    // Essayer de démarrer sur le port de développement
+    startServer(devPort).then((serverInstance) => {
+        server = serverInstance;
+    }).catch(async (err) => {
+        if (err.code === 'EADDRINUSE' && devPort === 3033) {
+            // Si le port 3033 est occupé, essayer le port 3001
+            console.log(`⚠️ Port ${devPort} occupé, tentative sur le port ${PORT}...`);
+            try {
+                server = await startServer(PORT);
+            } catch (fallbackErr) {
+                console.error('❌ Impossible de démarrer le serveur sur les ports 3033 et 3001');
+                console.error('💡 Arrêtez les processus utilisant ces ports ou changez le port dans la configuration');
+                process.exit(1);
+            }
+        } else {
+            console.error('❌ Erreur lors du démarrage du serveur:', err);
+            process.exit(1);
+        }
     });
 } else {
     console.log('🧪 Mode test détecté - Serveur non démarré');

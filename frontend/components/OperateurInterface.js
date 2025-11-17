@@ -61,6 +61,19 @@ class OperateurInterface {
         this.commentCharCount = document.getElementById('commentCharCount');
         this.commentsList = document.getElementById('commentsList');
         
+        // Éléments pour le scanner
+        this.scanBarcodeBtn = document.getElementById('scanBarcodeBtn');
+        this.scannerModal = document.getElementById('barcodeScannerModal');
+        this.closeScannerBtn = document.getElementById('closeScannerBtn');
+        this.scannerContainer = document.getElementById('scannerContainer');
+        this.scannerViewport = document.getElementById('scannerViewport');
+        this.scannerStatus = document.getElementById('scannerStatus');
+        
+        // État du scanner
+        this.scannerActive = false;
+        this.scannerInstance = null;
+        this.isProcessingScan = false; // Flag pour éviter les scans multiples
+        
         // Debug des éléments historique
         console.log('refreshHistoryBtn trouvé:', !!this.refreshHistoryBtn);
         console.log('operatorHistoryTableBody trouvé:', !!this.operatorHistoryTableBody);
@@ -156,6 +169,23 @@ class OperateurInterface {
         // Gestion des commentaires
         this.commentInput.addEventListener('input', () => this.handleCommentInput());
         this.addCommentBtn.addEventListener('click', () => this.handleAddComment());
+        
+        // Scanner de code-barres
+        if (this.scanBarcodeBtn) {
+            this.scanBarcodeBtn.addEventListener('click', () => this.openScanner());
+        }
+        if (this.closeScannerBtn) {
+            this.closeScannerBtn.addEventListener('click', () => this.closeScanner());
+        }
+        
+        // Fermer le scanner en cliquant en dehors
+        if (this.scannerModal) {
+            this.scannerModal.addEventListener('click', (e) => {
+                if (e.target === this.scannerModal) {
+                    this.closeScanner();
+                }
+            });
+        }
     }
 
     handleLancementInput() {
@@ -544,7 +574,10 @@ class OperateurInterface {
             }
             
             // Afficher un message de chargement
-            this.operatorHistoryTableBody.innerHTML = '<tr><td colspan="6" class="no-data">Chargement en cours...</td></tr>';
+            const loadingRow = document.createElement('tr');
+            loadingRow.innerHTML = '<td colspan="6" class="no-data"><i class="fas fa-spinner fa-spin"></i> Chargement en cours...</td>';
+            this.operatorHistoryTableBody.innerHTML = '';
+            this.operatorHistoryTableBody.appendChild(loadingRow);
             
             // Vérifier les propriétés de l'opérateur
             console.log('=== DEBUG OPÉRATEUR ===');
@@ -560,7 +593,23 @@ class OperateurInterface {
             
             if (!operatorCode) {
                 console.error('❌ Aucun code opérateur trouvé');
-                this.operatorHistoryTableBody.innerHTML = '<tr><td colspan="6" class="no-data">Code opérateur non trouvé</td></tr>';
+                const errorRow = document.createElement('tr');
+                errorRow.className = 'empty-state-row';
+                errorRow.innerHTML = `
+                    <td colspan="6" class="empty-state">
+                        <div style="text-align: center; padding: 3rem 2rem;">
+                            <i class="fas fa-exclamation-triangle" style="font-size: 3rem; color: #ffc107; margin-bottom: 1rem; display: block;"></i>
+                            <p style="font-size: 1.1rem; color: #666; margin: 0.5rem 0; font-weight: 500;">
+                                Code opérateur non trouvé
+                            </p>
+                            <p style="font-size: 0.9rem; color: #999; margin: 0;">
+                                Impossible de charger l'historique. Veuillez vous reconnecter.
+                            </p>
+                        </div>
+                    </td>
+                `;
+                this.operatorHistoryTableBody.innerHTML = '';
+                this.operatorHistoryTableBody.appendChild(errorRow);
                 return;
             }
             
@@ -575,12 +624,44 @@ class OperateurInterface {
                 this.displayOperatorHistory(data.operations);
             } else {
                 console.error('Erreur lors du chargement de l\'historique:', data.error);
-                this.operatorHistoryTableBody.innerHTML = '<tr><td colspan="6" class="no-data">Erreur lors du chargement</td></tr>';
+                const errorRow = document.createElement('tr');
+                errorRow.className = 'empty-state-row';
+                errorRow.innerHTML = `
+                    <td colspan="6" class="empty-state">
+                        <div style="text-align: center; padding: 3rem 2rem;">
+                            <i class="fas fa-exclamation-circle" style="font-size: 3rem; color: #dc3545; margin-bottom: 1rem; display: block;"></i>
+                            <p style="font-size: 1.1rem; color: #666; margin: 0.5rem 0; font-weight: 500;">
+                                Erreur lors du chargement
+                            </p>
+                            <p style="font-size: 0.9rem; color: #999; margin: 0;">
+                                ${data.error || 'Une erreur est survenue lors du chargement de l\'historique'}
+                            </p>
+                        </div>
+                    </td>
+                `;
+                this.operatorHistoryTableBody.innerHTML = '';
+                this.operatorHistoryTableBody.appendChild(errorRow);
             }
             
         } catch (error) {
             console.error('Erreur lors du chargement de l\'historique:', error);
-            this.operatorHistoryTableBody.innerHTML = '<tr><td colspan="6" class="no-data">Erreur de connexion</td></tr>';
+            const connectionErrorRow = document.createElement('tr');
+            connectionErrorRow.className = 'empty-state-row';
+            connectionErrorRow.innerHTML = `
+                <td colspan="6" class="empty-state">
+                    <div style="text-align: center; padding: 3rem 2rem;">
+                        <i class="fas fa-wifi" style="font-size: 3rem; color: #dc3545; margin-bottom: 1rem; display: block;"></i>
+                        <p style="font-size: 1.1rem; color: #666; margin: 0.5rem 0; font-weight: 500;">
+                            Erreur de connexion
+                        </p>
+                        <p style="font-size: 0.9rem; color: #999; margin: 0;">
+                            Impossible de se connecter au serveur. Vérifiez votre connexion internet.
+                        </p>
+                    </div>
+                </td>
+            `;
+            this.operatorHistoryTableBody.innerHTML = '';
+            this.operatorHistoryTableBody.appendChild(connectionErrorRow);
         }
     }
 
@@ -595,7 +676,23 @@ class OperateurInterface {
         
         if (!operations || operations.length === 0) {
             console.log('⚠️ Aucune opération à afficher');
-            this.operatorHistoryTableBody.innerHTML = '<tr><td colspan="6" class="no-data">Aucun lancement trouvé</td></tr>';
+            const emptyRow = document.createElement('tr');
+            emptyRow.className = 'empty-state-row';
+            emptyRow.innerHTML = `
+                <td colspan="6" class="empty-state">
+                    <div style="text-align: center; padding: 3rem 2rem;">
+                        <i class="fas fa-history" style="font-size: 3rem; color: #ccc; margin-bottom: 1rem; display: block;"></i>
+                        <p style="font-size: 1.1rem; color: #666; margin: 0.5rem 0; font-weight: 500;">
+                            Aucun lancement trouvé
+                        </p>
+                        <p style="font-size: 0.9rem; color: #999; margin: 0;">
+                            Votre historique est vide. Démarrez une opération pour voir votre historique ici.
+                        </p>
+                    </div>
+                </td>
+            `;
+            this.operatorHistoryTableBody.innerHTML = '';
+            this.operatorHistoryTableBody.appendChild(emptyRow);
             return;
         }
 
@@ -874,6 +971,277 @@ class OperateurInterface {
                 notification.remove();
             }
         }, 30000);
+    }
+
+    // ===== SCANNER DE CODE-BARRES =====
+    
+    async openScanner() {
+        if (!this.scannerModal) {
+            console.error('Modal scanner non trouvé');
+            return;
+        }
+        
+        this.scannerModal.style.display = 'flex';
+        this.scannerStatus.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> <span>Initialisation de la caméra...</span>';
+        
+        try {
+            // Vérifier si QuaggaJS est disponible
+            if (typeof Quagga === 'undefined') {
+                throw new Error('QuaggaJS n\'est pas chargé. Vérifiez votre connexion internet.');
+            }
+            
+            // Démarrer le scanner
+            await this.startBarcodeScanner();
+        } catch (error) {
+            console.error('Erreur lors de l\'ouverture du scanner:', error);
+            
+            let errorMessage = error.message || 'Erreur inconnue';
+            let userMessage = errorMessage;
+            
+            // Messages plus clairs pour l'utilisateur
+            if (errorMessage.includes('Permission')) {
+                userMessage = 'Permission d\'accès à la caméra requise. Veuillez autoriser l\'accès dans les paramètres de votre navigateur.';
+            } else if (errorMessage.includes('Aucune caméra')) {
+                userMessage = 'Aucune caméra détectée sur cet appareil. Veuillez connecter une caméra ou utiliser un autre appareil.';
+            } else if (errorMessage.includes('déjà utilisée')) {
+                userMessage = 'La caméra est déjà utilisée par une autre application. Veuillez fermer les autres applications utilisant la caméra.';
+            }
+            
+            this.scannerStatus.innerHTML = `
+                <div style="text-align: center; padding: 2rem;">
+                    <i class="fas fa-exclamation-triangle" style="font-size: 3rem; color: #dc3545; margin-bottom: 1rem; display: block;"></i>
+                    <p style="color: #dc3545; font-weight: 500; margin-bottom: 0.5rem;">Erreur d'accès à la caméra</p>
+                    <p style="color: #666; font-size: 0.9rem; margin: 0;">${userMessage}</p>
+                </div>
+            `;
+            
+            this.notificationManager.error(userMessage);
+            
+            // Fermer le scanner après un délai
+            setTimeout(() => {
+                this.closeScanner();
+            }, 5000);
+        }
+    }
+    
+    async startBarcodeScanner() {
+        // Vérifier si l'API MediaDevices est disponible
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error('L\'accès à la caméra n\'est pas supporté par ce navigateur. Veuillez utiliser un navigateur moderne (Chrome, Firefox, Safari, Edge).');
+        }
+        
+        // Demander les permissions et vérifier les caméras disponibles
+        try {
+            // Demander l'accès à la caméra pour obtenir les permissions
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            // Libérer immédiatement le stream, on va le récupérer via Quagga
+            stream.getTracks().forEach(track => track.stop());
+            
+            // Maintenant on peut énumérer les devices
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            
+            if (videoDevices.length === 0) {
+                throw new Error('Aucune caméra détectée sur cet appareil');
+            }
+            
+            console.log(`${videoDevices.length} caméra(s) disponible(s)`);
+        } catch (error) {
+            // Si c'est une erreur de permission, on la gère plus tard
+            if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                throw new Error('Permission d\'accès à la caméra refusée. Veuillez autoriser l\'accès à la caméra dans les paramètres de votre navigateur.');
+            } else if (error.name === 'NotFoundError') {
+                throw new Error('Aucune caméra détectée sur cet appareil');
+            } else if (error.name === 'NotReadableError') {
+                throw new Error('La caméra est déjà utilisée par une autre application');
+            }
+            // Pour les autres erreurs, on continue quand même
+            console.warn('Impossible de vérifier les caméras:', error);
+        }
+        
+        // Essayer différentes configurations de caméra
+        const cameraConfigs = [
+            { facingMode: "environment" }, // Caméra arrière (priorité pour mobile)
+            { facingMode: "user" },         // Caméra avant
+            {}                              // Aucune préférence (première caméra disponible)
+        ];
+        
+        for (let i = 0; i < cameraConfigs.length; i++) {
+            try {
+                const config = cameraConfigs[i];
+                console.log(`Tentative ${i + 1}/${cameraConfigs.length} avec config:`, config);
+                
+                const result = await this.tryInitQuagga(config);
+                return result;
+            } catch (error) {
+                console.warn(`Tentative ${i + 1} échouée:`, error);
+                
+                // Si c'est la dernière tentative, rejeter avec un message clair
+                if (i === cameraConfigs.length - 1) {
+                    let errorMessage = 'Impossible d\'accéder à la caméra. ';
+                    
+                    if (error.name === 'NotFoundError' || error.name === 'NotReadableError') {
+                        errorMessage += 'Aucune caméra disponible ou caméra déjà utilisée par une autre application.';
+                    } else if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                        errorMessage += 'Permission d\'accès à la caméra refusée. Veuillez autoriser l\'accès à la caméra dans les paramètres de votre navigateur.';
+                    } else if (error.name === 'OverconstrainedError') {
+                        errorMessage += 'Les paramètres de la caméra ne sont pas supportés par cet appareil.';
+                    } else {
+                        errorMessage += error.message || 'Erreur inconnue.';
+                    }
+                    
+                    throw new Error(errorMessage);
+                }
+            }
+        }
+    }
+    
+    async tryInitQuagga(constraints) {
+        return new Promise((resolve, reject) => {
+            // Configuration QuaggaJS pour les code-barres EAN, CODE128, etc.
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: this.scannerViewport,
+                    constraints: {
+                        width: { min: 320, ideal: 640, max: 1280 },
+                        height: { min: 240, ideal: 480, max: 720 },
+                        ...constraints
+                    }
+                },
+                locator: {
+                    patchSize: "medium",
+                    halfSample: true
+                },
+                numOfWorkers: 2,
+                decoder: {
+                    readers: [
+                        "code_128_reader",
+                        "ean_reader",
+                        "ean_8_reader",
+                        "code_39_reader",
+                        "code_39_vin_reader",
+                        "codabar_reader",
+                        "upc_reader",
+                        "upc_e_reader",
+                        "i2of5_reader"
+                    ]
+                },
+                locate: true
+            }, (err) => {
+                if (err) {
+                    console.error('Erreur initialisation Quagga:', err);
+                    reject(err);
+                    return;
+                }
+                
+                console.log('Scanner initialisé avec succès');
+                Quagga.start();
+                this.scannerActive = true;
+                this.scannerInstance = Quagga;
+                
+                this.scannerStatus.innerHTML = '<i class="fas fa-check-circle" style="color: green;"></i> <span style="color: green;">Caméra active - Scannez un code-barres</span>';
+                
+                // Écouter les résultats de scan
+                Quagga.onDetected((result) => {
+                    if (result && result.codeResult && result.codeResult.code) {
+                        const scannedCode = result.codeResult.code.trim();
+                        console.log('Code scanné:', scannedCode);
+                        this.handleScannedCode(scannedCode);
+                    }
+                });
+                
+                resolve();
+            });
+        });
+    }
+    
+    handleScannedCode(scannedCode) {
+        // Empêcher les scans multiples rapides
+        if (this.isProcessingScan) {
+            console.log('Scan déjà en cours de traitement, ignoré');
+            return;
+        }
+        this.isProcessingScan = true;
+        
+        try {
+            // Nettoyer le code scanné (enlever les espaces, caractères spéciaux, etc.)
+            let cleanCode = scannedCode.trim().replace(/[\s\-_\.]/g, '');
+            
+            console.log('Code scanné brut:', scannedCode);
+            console.log('Code nettoyé:', cleanCode);
+            
+            // Validation basique : le code doit contenir au moins des caractères alphanumériques
+            if (!cleanCode || cleanCode.length < 3) {
+                throw new Error('Code scanné trop court ou invalide');
+            }
+            
+            // Si le code ne commence pas par "LT", l'ajouter
+            const upperCode = cleanCode.toUpperCase();
+            if (!upperCode.startsWith('LT')) {
+                // Si c'est juste des chiffres, ajouter "LT"
+                if (/^\d+$/.test(cleanCode)) {
+                    cleanCode = 'LT' + cleanCode;
+                } else if (upperCode.includes('LT')) {
+                    // Si "LT" est présent ailleurs, le déplacer au début
+                    cleanCode = 'LT' + cleanCode.replace(/LT/gi, '');
+                } else {
+                    // Sinon, ajouter "LT" au début
+                    cleanCode = 'LT' + cleanCode;
+                }
+            }
+            
+            // Normaliser en majuscules
+            cleanCode = cleanCode.toUpperCase();
+            
+            // Validation finale : format attendu LT + chiffres
+            if (!/^LT\d+$/.test(cleanCode)) {
+                console.warn('Format de code non standard:', cleanCode);
+                // On accepte quand même mais on log un avertissement
+            }
+            
+            console.log('Code final après traitement:', cleanCode);
+            
+            // Mettre le code dans le champ de saisie
+            this.lancementInput.value = cleanCode;
+            
+            // Fermer le scanner
+            this.closeScanner();
+            
+            // Notification de succès
+            this.notificationManager.success(`Code scanné: ${cleanCode}`);
+            
+            // Valider automatiquement le lancement après un court délai
+            setTimeout(() => {
+                this.validateAndSelectLancement();
+                this.isProcessingScan = false;
+            }, 500);
+            
+        } catch (error) {
+            console.error('Erreur lors du traitement du code scanné:', error);
+            this.notificationManager.error(`Erreur scan: ${error.message}`);
+            this.isProcessingScan = false;
+            // Ne pas fermer le scanner en cas d'erreur pour permettre un nouveau scan
+        }
+    }
+    
+    closeScanner() {
+        if (this.scannerActive && this.scannerInstance) {
+            try {
+                this.scannerInstance.stop();
+                this.scannerInstance = null;
+                this.scannerActive = false;
+            } catch (error) {
+                console.error('Erreur lors de l\'arrêt du scanner:', error);
+            }
+        }
+        
+        if (this.scannerModal) {
+            this.scannerModal.style.display = 'none';
+        }
+        
+        this.scannerStatus.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> <span>Initialisation de la caméra...</span>';
     }
 }
 

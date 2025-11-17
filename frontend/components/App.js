@@ -83,13 +83,31 @@ class App {
             notificationManager.error('Une erreur inattendue s\'est produite');
         });
 
-        // Vérification de la connexion
-        setInterval(() => {
+        // Vérification de la connexion (seulement si un opérateur est connecté)
+        let lastHealthStatus = true;
+        setInterval(async () => {
             if (this.currentOperator) {
-                this.apiService.healthCheck()
-                    .catch(() => {
-                        notificationManager.error('Connexion au serveur perdue');
-                    });
+                try {
+                    const health = await this.apiService.healthCheck();
+                    const isAccessible = health.accessible !== false && health.status !== 'error';
+                    
+                    // Afficher une notification seulement si le statut change (de accessible à inaccessible)
+                    if (lastHealthStatus && !isAccessible) {
+                        notificationManager.warning('Connexion au serveur perdue. Vérifiez votre connexion réseau.');
+                    } else if (!lastHealthStatus && isAccessible) {
+                        notificationManager.success('Connexion au serveur rétablie');
+                    }
+                    
+                    lastHealthStatus = isAccessible;
+                } catch (error) {
+                    // Ne pas afficher d'erreur pour les health checks - c'est normal si le serveur n'est pas accessible
+                    if (error.message !== 'SERVER_NOT_ACCESSIBLE') {
+                        console.debug('Health check échoué:', error);
+                    }
+                    if (lastHealthStatus) {
+                        lastHealthStatus = false;
+                    }
+                }
             }
         }, 30000);
     }

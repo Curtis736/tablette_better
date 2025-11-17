@@ -2,18 +2,22 @@
 class ApiService {
     constructor() {
         // Détection automatique de l'environnement
-        const currentPort = window.location.port;
+        const currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
         const currentHost = window.location.hostname;
         
         // Détection de l'environnement - FORCER LOCALHOST EN DÉVELOPPEMENT
-        const isLocalDev = (currentHost === 'localhost' || currentHost === '127.0.0.1' || currentHost.startsWith('172.')) && currentPort === '8080';
+        // Seulement si on est sur localhost:8080 ET qu'on a accès direct au backend (dev local sans Docker)
+        const isLocalDev = (currentHost === 'localhost' || currentHost === '127.0.0.1') && currentPort === '8080';
         
         if (isLocalDev) {
             // Environnement de développement local - connexion directe au backend
             this.baseUrl = `http://localhost:3033/api`;
+            console.log('🔧 Mode développement local détecté - connexion directe au backend');
         } else {
-            // Environnement de production - utiliser le proxy Nginx
+            // Environnement de production ou Docker - utiliser le proxy Nginx
+            // Utiliser toujours le proxy pour éviter les problèmes de CORS et de connexion
             this.baseUrl = `${window.location.protocol}//${window.location.host}/api`;
+            console.log('🌐 Mode production/Docker détecté - utilisation du proxy Nginx');
         }
         
         this.defaultHeaders = {
@@ -113,6 +117,13 @@ class ApiService {
 
             return await response.json();
         } catch (error) {
+            // Ne pas logger les erreurs de réseau pour les health checks (évite le spam)
+            if (endpoint === '/health' && (error.name === 'TypeError' || error.message.includes('Failed to fetch'))) {
+                // Erreur silencieuse pour le health check - c'est normal si le serveur n'est pas accessible
+                console.debug(`Health check échoué (serveur non accessible): ${url}`);
+                throw new Error('SERVER_NOT_ACCESSIBLE');
+            }
+            
             console.error(`Erreur API ${endpoint}:`, error);
             throw error;
         }
@@ -150,7 +161,19 @@ class ApiService {
 
     // Vérifier la santé du serveur
     async healthCheck() {
-        return this.get('/health');
+        try {
+            return await this.get('/health');
+        } catch (error) {
+            // Si c'est une erreur de connexion, retourner un objet indiquant que le serveur n'est pas accessible
+            if (error.message === 'SERVER_NOT_ACCESSIBLE' || error.name === 'TypeError') {
+                return {
+                    status: 'error',
+                    message: 'Serveur non accessible',
+                    accessible: false
+                };
+            }
+            throw error;
+        }
     }
 
     // Authentification admin

@@ -545,7 +545,10 @@ router.post('/start', async (req, res) => {
             });
         }
 
-        // Vérifier si le lancement est déjà en cours par un autre opérateur
+        // ✅ AUTORISATION : Plusieurs opérateurs peuvent travailler sur le même lancement simultanément
+        // La vérification de conflit a été désactivée pour permettre la collaboration multi-opérateurs
+        // Ancienne vérification commentée :
+        /*
         try {
             const conflictQuery = `
                 SELECT TOP 1 OperatorCode, Statut, DateCreation
@@ -571,6 +574,7 @@ router.post('/start', async (req, res) => {
         } catch (error) {
             console.log('⚠️ Erreur vérification conflit:', error.message);
         }
+        */
         
         // Enregistrer l'événement DEBUT dans ABHISTORIQUE_OPERATEURS avec l'heure française
         const insertQuery = `
@@ -579,7 +583,7 @@ router.post('/start', async (req, res) => {
             VALUES (
                 @operatorId,
                 @lancementCode,
-                'PRODUCTION',
+                @operatorId,
                 'DEBUT',
                 'PRODUCTION',
                 'EN_COURS',
@@ -642,7 +646,7 @@ router.post('/pause', async (req, res) => {
             VALUES (
                 '${operatorId}',
                 '${lancementCode}',
-                'PRODUCTION',
+                '${operatorId}',
                 'PAUSE',
                 'PRODUCTION',
                 'EN_PAUSE',
@@ -700,7 +704,7 @@ router.post('/resume', async (req, res) => {
             VALUES (
                 '${operatorId}',
                 '${lancementCode}',
-                'PRODUCTION',
+                '${operatorId}',
                 'REPRISE',
                 'PRODUCTION',
                 'EN_COURS',
@@ -758,7 +762,7 @@ router.post('/stop', async (req, res) => {
             VALUES (
                 '${operatorId}',
                 '${lancementCode}',
-                'PRODUCTION',
+                '${operatorId}',
                 'FIN',
                 'PRODUCTION',
                 'TERMINE',

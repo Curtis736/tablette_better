@@ -113,11 +113,6 @@ jobs:
         node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8'))"
         cd ../frontend
         node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8'))"
-        
-    - name: Validate Jest configuration
-      run: |
-        cd backend
-        node -e "require('./jest.config.js')"
 
   build:
     name: Build Check

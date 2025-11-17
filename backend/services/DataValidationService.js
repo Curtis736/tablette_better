@@ -49,7 +49,10 @@ class DataValidationService {
                 return result;
             }
 
-            // Vérifier qu'il n'y a pas de conflit avec un autre opérateur
+            // ✅ AUTORISATION : Plusieurs opérateurs peuvent travailler sur le même lancement simultanément
+            // La vérification de conflit a été désactivée pour permettre la collaboration multi-opérateurs
+            // Ancienne vérification commentée :
+            /*
             const conflictQuery = `
                 SELECT TOP 1 OperatorCode, Statut, DateCreation
                 FROM [SEDI_APP_INDEPENDANTE].[dbo].[ABHISTORIQUE_OPERATEURS]
@@ -70,6 +73,7 @@ class DataValidationService {
                 this.cache.set(cacheKey, { result, timestamp: Date.now() });
                 return result;
             }
+            */
 
             const result = { 
                 valid: true, 
@@ -156,7 +160,7 @@ class DataValidationService {
                     h.HeureDebut,
                     h.HeureFin,
                     h.DateCreation,
-                    r.Designation1 as operatorName,
+                    COALESCE(r.Designation1, 'Opérateur ' + CAST(h.OperatorCode AS VARCHAR)) as operatorName,
                     r.Coderessource as resourceCode,
                     l.DesignationLct1 as Article,
                     l.DesignationLct2 as ArticleDetail,

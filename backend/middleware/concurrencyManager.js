@@ -29,7 +29,10 @@ class ConcurrencyManager {
             };
         }
 
-        // Vérifier si le lancement est déjà pris par un autre opérateur
+        // ✅ AUTORISATION : Plusieurs opérateurs peuvent travailler sur le même lancement simultanément
+        // La vérification de verrouillage exclusif a été désactivée pour permettre la collaboration multi-opérateurs
+        // Ancienne vérification commentée :
+        /*
         const lockInfo = this.lancementLocks.get(lancementCode);
         if (lockInfo && lockInfo.operatorCode !== operatorCode) {
             return {
@@ -38,6 +41,7 @@ class ConcurrencyManager {
                 conflict: lockInfo
             };
         }
+        */
 
         return { allowed: true };
     }

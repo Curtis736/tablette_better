@@ -31,3 +31,16 @@ echo "🚀 Vous pouvez maintenant démarrer le monitoring:"
 echo "   cd ~/tablette_better"
 echo "   docker-compose -f docker/docker-compose.monitoring.yml up -d"
 echo ""
+
+
+
+
+
+
+
+
+
+
+
+
+

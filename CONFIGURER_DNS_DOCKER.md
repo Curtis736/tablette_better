@@ -57,3 +57,14 @@ docker pull prom/prometheus:latest
 docker info | grep -i dns
 ```
 
+
+
+
+
+
+
+
+
+
+
+

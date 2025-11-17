@@ -33,3 +33,16 @@ echo "   tar xzf monitoring-images.tar.gz"
 echo "   docker load -i prometheus-image.tar"
 echo "   docker load -i grafana-image.tar"
 echo ""
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -124,7 +124,10 @@ router.post('/start', validateConcurrency, releaseResources, async (req, res) =>
             console.log('⚠️ Erreur lecture lancement:', error.message);
         }
 
-        // Vérifier si le lancement est déjà en cours par un autre opérateur
+        // ✅ AUTORISATION : Plusieurs opérateurs peuvent travailler sur le même lancement simultanément
+        // La vérification de conflit a été désactivée pour permettre la collaboration multi-opérateurs
+        // Ancienne vérification commentée :
+        /*
         try {
             const conflictQuery = `
                 SELECT TOP 1 OperatorCode, Statut, DateCreation
@@ -149,6 +152,7 @@ router.post('/start', validateConcurrency, releaseResources, async (req, res) =>
         } catch (error) {
             console.log('⚠️ Erreur vérification conflit:', error.message);
         }
+        */
         
         // 1️⃣ CRÉER/METTRE À JOUR SESSION dans ABSESSIONS_OPERATEURS
         console.log('📝 1. Gestion session opérateur...');

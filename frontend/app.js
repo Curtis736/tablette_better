@@ -118,7 +118,16 @@ class App {
     }
 
     getApiBaseUrl() {
-        return 'http://localhost:3001/api';
+        // Utiliser la même logique de détection que ApiService
+        const currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+        const currentHost = window.location.hostname;
+        const isLocalDev = (currentHost === 'localhost' || currentHost === '127.0.0.1') && currentPort === '8080';
+        
+        if (isLocalDev) {
+            return 'http://localhost:3033/api';
+        } else {
+            return `${window.location.protocol}//${window.location.host}/api`;
+        }
     }
 
     showNotification(message, type = 'info') {

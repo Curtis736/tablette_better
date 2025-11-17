@@ -1,5 +1,6 @@
 // Page d'administration - v20251014-fixed-v4
 import TimeUtils from '../utils/TimeUtils.js';
+import LogViewer from './LogViewer.js';
 
 class AdminPage {
     constructor(app) {
@@ -25,6 +26,15 @@ class AdminPage {
         this.initializeElements();
         this.setupEventListeners();
         this.startAutoSave();
+        
+        // Initialize Log Viewer
+        try {
+            this.logViewer = new LogViewer(app);
+            // Make it globally accessible for the onclick handlers
+            window.logViewer = this.logViewer;
+        } catch (error) {
+            console.error('Error initializing LogViewer:', error);
+        }
     }
 
     initializeElements() {
@@ -87,7 +97,11 @@ class AdminPage {
                 // Bouton Actualiser
                 const refreshBtn = document.getElementById('refreshDataBtn');
                 if (refreshBtn) {
-                    refreshBtn.addEventListener('click', () => this.loadData());
+                    refreshBtn.addEventListener('click', () => {
+                        // Réinitialiser le compteur d'erreurs pour permettre un nouveau chargement
+                        this.resetConsecutiveErrors();
+                        this.loadData();
+                    });
                     console.log('Listener ajouté: refreshDataBtn');
                 }
                 
@@ -192,7 +206,16 @@ class AdminPage {
         // Actualisation automatique avec retry en cas d'erreur
         // Auto-refresh plus fréquent pour les mises à jour temps réel
         this.lastEditTime = 0; // Timestamp de la dernière édition pour éviter le rechargement immédiat
+        this.consecutiveErrors = 0; // Compteur d'erreurs consécutives
+        this.maxConsecutiveErrors = 3; // Arrêter le refresh après 3 erreurs consécutives
+        
         this.refreshInterval = setInterval(() => {
+            // Ne pas recharger si trop d'erreurs consécutives
+            if (this.consecutiveErrors >= this.maxConsecutiveErrors) {
+                console.log(`⏸️ Refresh automatique désactivé (${this.consecutiveErrors} erreurs consécutives)`);
+                return;
+            }
+            
             // Ne pas recharger si une édition vient d'être effectuée (dans les 5 dernières secondes)
             const timeSinceLastEdit = Date.now() - this.lastEditTime;
             if (!this.isLoading && timeSinceLastEdit > 5000) {
@@ -204,7 +227,10 @@ class AdminPage {
 
         // Mise à jour temps réel des opérateurs connectés
         this.operatorsInterval = setInterval(() => {
-            this.updateOperatorsStatus();
+            // Ne pas mettre à jour si trop d'erreurs
+            if (this.consecutiveErrors < this.maxConsecutiveErrors) {
+                this.updateOperatorsStatus();
+            }
         }, 5000); // Toutes les 5 secondes
     }
 
@@ -218,12 +244,23 @@ class AdminPage {
             console.log('DEBUT loadData()');
             this.isLoading = true;
             
-            // Charger les opérateurs connectés et les données admin en parallèle
+            // Charger les opérateurs connectés et les données admin en parallèle avec timeout
             // Utiliser la date du jour pour récupérer les données
             const today = new Date().toISOString().split('T')[0];
-            const [adminData, operatorsData] = await Promise.all([
+            
+            // Créer des promesses avec timeout
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Timeout: La requête a pris trop de temps')), 30000)
+            );
+            
+            const dataPromise = Promise.all([
                 this.apiService.getAdminData(today),
                 this.apiService.getConnectedOperators()
+            ]);
+            
+            const [adminData, operatorsData] = await Promise.race([
+                dataPromise,
+                timeoutPromise
             ]);
             
             // Les données sont déjà parsées par ApiService
@@ -231,6 +268,9 @@ class AdminPage {
             
             console.log('DONNEES BRUTES:', data);
             console.log('OPERATEURS CONNECTES:', operatorsData);
+            
+            // Réinitialiser le compteur d'erreurs en cas de succès
+            this.consecutiveErrors = 0;
             
             if (data && data.operations) {
                 this.operations = data.operations;
@@ -277,51 +317,60 @@ class AdminPage {
         } catch (error) {
             console.error('❌ ERREUR loadData():', error);
             
+            // Incrémenter le compteur d'erreurs
+            this.consecutiveErrors++;
+            
             // Afficher un message d'erreur plus informatif
             let errorMessage = 'Erreur de connexion au serveur';
-            if (error.message.includes('HTTP')) {
+            if (error.message.includes('Timeout')) {
+                errorMessage = 'Le serveur met trop de temps à répondre. Vérifiez votre connexion.';
+            } else if (error.message.includes('HTTP')) {
                 errorMessage = `Erreur serveur: ${error.message}`;
             } else if (error.message.includes('fetch')) {
                 errorMessage = 'Impossible de contacter le serveur';
             }
             
-            this.notificationManager.error(errorMessage);
+            // Ne pas spammer les notifications si trop d'erreurs
+            if (this.consecutiveErrors <= 2) {
+                this.notificationManager.error(errorMessage);
+            } else if (this.consecutiveErrors === this.maxConsecutiveErrors) {
+                this.notificationManager.warning('Chargement automatique désactivé après plusieurs erreurs. Cliquez sur "Actualiser" pour réessayer.');
+            }
             
             // Afficher les données en cache si disponibles
             if (this.operations.length > 0) {
-                this.notificationManager.info('Affichage des données en cache');
+                if (this.consecutiveErrors <= 2) {
+                    this.notificationManager.info('Affichage des données en cache');
+                }
                 this.updateOperationsTable();
             } else {
                 // Afficher un message dans le tableau
                 this.showNoDataMessage();
             }
+            
+            // Relancer l'erreur pour que loadDataWithRetry puisse la gérer
+            throw error;
         } finally {
             this.isLoading = false;
         }
     }
 
-    async loadDataWithRetry(maxRetries = 3) {
-        let retries = 0;
-        
-        while (retries < maxRetries) {
-            try {
-                await this.loadData();
-                return; // Succès, sortir de la boucle
-            } catch (error) {
-                retries++;
-                console.warn(`Tentative ${retries}/${maxRetries} échouée:`, error.message);
-                
-                if (retries < maxRetries) {
-                    // Attendre avant de réessayer (backoff exponentiel)
-                    const delay = Math.pow(2, retries) * 1000; // 2s, 4s, 8s...
-                    console.log(`Attente de ${delay}ms avant la prochaine tentative...`);
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                } else {
-                    console.error('Toutes les tentatives ont échoué');
-                    this.notificationManager.error('Impossible de charger les données après plusieurs tentatives');
-                }
-            }
+    async loadDataWithRetry(maxRetries = 1) {
+        // Réduire les tentatives pour éviter les boucles infinies
+        // Le setInterval se chargera de réessayer plus tard
+        try {
+            await this.loadData();
+        } catch (error) {
+            console.warn(`Échec du chargement:`, error.message);
+            // Ne pas réessayer immédiatement, laisser le setInterval gérer
+            // Cela évite les boucles infinies
         }
+    }
+    
+    // Méthode pour réactiver le refresh automatique
+    resetConsecutiveErrors() {
+        this.consecutiveErrors = 0;
+        console.log('✅ Compteur d\'erreurs réinitialisé, refresh automatique réactivé');
     }
 
     updateStats() {
@@ -664,10 +713,13 @@ class AdminPage {
         if (statusFilter && statusFilter.value) {
             const selectedStatus = statusFilter.value;
             console.log('🔍 Filtrage par statut:', selectedStatus);
+            console.log('🔍 Opérations avant filtrage:', filteredOperations.length);
+            
+            const beforeCount = filteredOperations.length;
             filteredOperations = filteredOperations.filter(op => {
-                // Comparer avec statusCode ou status
-                const opStatus = (op.statusCode || op.status || '').toUpperCase();
-                const selectedStatusUpper = selectedStatus.toUpperCase();
+                // Comparer avec statusCode (priorité) ou status (fallback)
+                const opStatus = (op.statusCode || op.status || '').toUpperCase().trim();
+                const selectedStatusUpper = selectedStatus.toUpperCase().trim();
                 
                 // Correspondance exacte
                 if (opStatus === selectedStatusUpper) {
@@ -675,18 +727,34 @@ class AdminPage {
                 }
                 
                 // Gestion spéciale pour "PAUSE" et "EN_PAUSE"
-                if (selectedStatusUpper === 'PAUSE' || selectedStatusUpper === 'EN_PAUSE') {
-                    return opStatus === 'EN_PAUSE' || opStatus === 'PAUSE';
+                if ((selectedStatusUpper === 'PAUSE' || selectedStatusUpper === 'EN_PAUSE') && 
+                    (opStatus === 'EN_PAUSE' || opStatus === 'PAUSE')) {
+                    return true;
                 }
                 
-                // Gestion spéciale pour "EN_COURS"
-                if (selectedStatusUpper === 'EN_COURS') {
-                    return opStatus === 'EN_COURS';
+                // Gestion spéciale pour "EN_COURS" - doit être exact
+                if (selectedStatusUpper === 'EN_COURS' && opStatus === 'EN_COURS') {
+                    return true;
+                }
+                
+                // Gestion spéciale pour "TERMINE" / "TERMINÉ"
+                if ((selectedStatusUpper === 'TERMINE' || selectedStatusUpper === 'TERMINÉ') && 
+                    (opStatus === 'TERMINE' || opStatus === 'TERMINÉ')) {
+                    return true;
                 }
                 
                 return false;
             });
-            console.log(`📊 Après filtrage statut: ${filteredOperations.length} opérations`);
+            
+            const afterCount = filteredOperations.length;
+            console.log(`📊 Filtrage statut: ${beforeCount} → ${afterCount} opérations`);
+            
+            if (afterCount === 0 && beforeCount > 0) {
+                console.log('⚠️ Aucune opération ne correspond au filtre de statut:', selectedStatus);
+                // Utiliser this.operations pour voir les statuts disponibles (avant filtrage)
+                const availableStatuses = [...new Set(this.operations.map(op => (op.statusCode || op.status || '').toUpperCase().trim()))];
+                console.log('🔍 Statuts disponibles dans les opérations:', availableStatuses);
+            }
         }
         
         // Filtre de recherche (code lancement)
@@ -710,6 +778,11 @@ class AdminPage {
         
         if (filteredOperations.length === 0) {
             console.log('⚠️ AUCUNE OPERATION APRES FILTRAGE - AFFICHAGE MESSAGE');
+            console.log('🔍 Filtres actifs:', {
+                statusFilter: statusFilter?.value || 'aucun',
+                searchFilter: searchFilter?.value || 'aucun',
+                totalOperations: this.operations.length
+            });
             
             // Message personnalisé selon les filtres actifs
             if (statusFilter && statusFilter.value) {
