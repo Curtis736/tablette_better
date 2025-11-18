@@ -87,7 +87,17 @@
                     <h2><i class="fas fa-keyboard"></i> Code de Lancement</h2>
                     <div class="input-group">
                         <i class="fas fa-barcode"></i>
-                        <input type="text" id="lancementSearch" placeholder="Saisir le code de lancement..." autocomplete="off" value="LT">
+                        <input
+                            type="text"
+                            id="lancementSearch"
+                            placeholder="Saisir le code de lancement..."
+                            autocomplete="off"
+                            value="LT"
+                            inputmode="numeric"
+                            pattern="[0-9]*"
+                            maxlength="10"
+                            aria-label="Saisir les chiffres du code de lancement"
+                        >
                         <button id="scanBarcodeBtn" class="btn-scan" title="Scanner un code-barres">
                             <i class="fas fa-camera"></i>
                         </button>

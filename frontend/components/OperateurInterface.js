@@ -19,6 +19,9 @@ class OperateurInterface {
         this.lastActionTime = 0;
         this.actionCooldown = 1000; // 1 seconde entre les actions
         
+        this.LANCEMENT_PREFIX = 'LT';
+        this.MAX_LANCEMENT_DIGITS = 8;
+        
         this.initializeElements();
         this.setupEventListeners();
         this.initializeLancementInput();
@@ -87,76 +90,37 @@ class OperateurInterface {
     }
 
     initializeLancementInput() {
-        // Positionner le curseur après "LT" au chargement
-        if (this.lancementInput && this.lancementInput.value === 'LT') {
-            setTimeout(() => {
-                this.lancementInput.focus();
-                this.lancementInput.setSelectionRange(2, 2); // Position après "LT"
-            }, 100);
+        if (!this.lancementInput) {
+            console.error('Champ de saisie du lancement introuvable');
+            return;
         }
         
-        // Empêcher la suppression de "LT" au début
-        this.lancementInput.addEventListener('keydown', (e) => {
-            const value = this.lancementInput.value;
-            const cursorPos = this.lancementInput.selectionStart;
-            
-            // Empêcher la suppression de "LT" au début
-            if ((e.key === 'Backspace' || e.key === 'Delete') && 
-                (cursorPos <= 2 || value.length <= 2)) {
-                e.preventDefault();
-                this.lancementInput.value = 'LT';
-                this.lancementInput.setSelectionRange(2, 2);
-            }
-        });
+        // Forcer la présence du préfixe et du format numérique dès l'initialisation
+        this.enforceNumericLancementInput(false);
         
-        // Réinitialiser à "LT" si le champ devient vide
-        this.lancementInput.addEventListener('input', (e) => {
-            const value = e.target.value;
-            if (!value || !value.startsWith('LT')) {
-                e.target.value = 'LT';
-                e.target.setSelectionRange(2, 2);
-            }
-        });
-        
-        // Focus automatique sur le champ au clic
-        this.lancementInput.addEventListener('focus', (e) => {
-            if (e.target.value === 'LT') {
-                setTimeout(() => {
-                    e.target.setSelectionRange(2, 2);
-                }, 10);
-            }
-        });
-
-        // Focus automatique et positionnement après "LT" à chaque interaction
-        this.lancementInput.addEventListener('click', (e) => {
-            if (e.target.value === 'LT') {
-                setTimeout(() => {
-                    e.target.setSelectionRange(2, 2);
-                }, 10);
-            }
-        });
-
-        // Focus automatique au chargement de la page
-        this.lancementInput.addEventListener('load', () => {
+        // Focus automatique après un léger délai pour garantir le rendu DOM
+        setTimeout(() => {
             this.lancementInput.focus();
-            this.lancementInput.setSelectionRange(2, 2);
+            this.setLancementCaretAfterPrefix();
+        }, 150);
+        
+        // À chaque prise de focus ou clic, replacer le curseur après le préfixe
+        ['focus', 'click'].forEach((eventName) => {
+            this.lancementInput.addEventListener(eventName, () => {
+                this.enforceNumericLancementInput();
+            });
         });
     }
 
     setupEventListeners() {
-        // Validation du code de lancement en temps réel avec auto-vérification
-        this.lancementInput.addEventListener('input', () => this.handleLancementInput());
-        this.lancementInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' || e.keyCode === 13) {
-                e.preventDefault();
-                this.validateAndSelectLancement();
-            }
-        });
-        
-        // Gestion de la saisie du code de lancement
-        this.lancementInput.addEventListener('input', () => {
-            this.handleLancementInput();
-        });
+        if (this.lancementInput) {
+            // Validation du code de lancement en temps réel avec auto-vérification
+            this.lancementInput.addEventListener('input', () => this.handleLancementInput());
+            
+            // Forcer le clavier numérique et interdire les caractères non numériques
+            this.lancementInput.addEventListener('keydown', (event) => this.handleLancementKeydown(event));
+            this.lancementInput.addEventListener('paste', (event) => this.handleLancementPaste(event));
+        }
         
         // Contrôles de lancement
         this.startBtn.addEventListener('click', () => this.handleStart());
@@ -188,8 +152,100 @@ class OperateurInterface {
         }
     }
 
+    handleLancementKeydown(event) {
+        if (!this.lancementInput) {
+            return;
+        }
+        
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            this.validateAndSelectLancement();
+            return;
+        }
+        
+        // Autoriser les raccourcis clavier (copier/coller, etc.)
+        if (event.ctrlKey || event.metaKey || event.altKey) {
+            return;
+        }
+        
+        const navigationKeys = ['Tab', 'Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+        if (navigationKeys.includes(event.key)) {
+            if ((event.key === 'Backspace' || event.key === 'ArrowLeft' || event.key === 'Home') &&
+                this.lancementInput.selectionStart <= this.LANCEMENT_PREFIX.length) {
+                event.preventDefault();
+                this.setLancementCaretAfterPrefix(0);
+            }
+            return;
+        }
+        
+        // Bloquer tout caractère non numérique
+        if (!/^\d$/.test(event.key)) {
+            event.preventDefault();
+            return;
+        }
+        
+        const digitsLength = this.getSanitizedDigitsFromValue(this.lancementInput.value).length;
+        if (digitsLength >= this.MAX_LANCEMENT_DIGITS) {
+            event.preventDefault();
+        }
+    }
+    
+    handleLancementPaste(event) {
+        if (!this.lancementInput) {
+            return;
+        }
+        
+        event.preventDefault();
+        const pastedData = (event.clipboardData || window.clipboardData).getData('text') || '';
+        const digits = this.getSanitizedDigitsFromValue(pastedData);
+        this.lancementInput.value = `${this.LANCEMENT_PREFIX}${digits}`;
+        this.setLancementCaretAfterPrefix(digits.length);
+        this.handleLancementInput();
+    }
+    
+    getSanitizedDigitsFromValue(value = '') {
+        if (!value) {
+            return '';
+        }
+        return value.replace(/[^0-9]/g, '').slice(0, this.MAX_LANCEMENT_DIGITS);
+    }
+    
+    enforceNumericLancementInput(restoreCaret = true) {
+        if (!this.lancementInput) {
+            return `${this.LANCEMENT_PREFIX}`;
+        }
+        
+        const digits = this.getSanitizedDigitsFromValue(this.lancementInput.value);
+        const sanitizedValue = `${this.LANCEMENT_PREFIX}${digits}`;
+        
+        if (this.lancementInput.value !== sanitizedValue) {
+            this.lancementInput.value = sanitizedValue;
+        }
+        
+        if (restoreCaret) {
+            this.setLancementCaretAfterPrefix(digits.length);
+        }
+        
+        return sanitizedValue;
+    }
+    
+    setLancementCaretAfterPrefix(digitsLength = null) {
+        if (!this.lancementInput) {
+            return;
+        }
+        
+        const length = typeof digitsLength === 'number'
+            ? digitsLength
+            : this.getSanitizedDigitsFromValue(this.lancementInput.value).length;
+        const position = this.LANCEMENT_PREFIX.length + length;
+        
+        requestAnimationFrame(() => {
+            this.lancementInput.setSelectionRange(position, position);
+        });
+    }
+
     handleLancementInput() {
-        const code = this.lancementInput.value.trim();
+        const code = this.enforceNumericLancementInput();
         
         if (code.length > 0) {
             // Afficher les contrôles dès qu'un code est saisi
@@ -1203,14 +1259,16 @@ class OperateurInterface {
             
             console.log('Code final après traitement:', cleanCode);
             
-            // Mettre le code dans le champ de saisie
+            // Mettre le code dans le champ de saisie et le normaliser
             this.lancementInput.value = cleanCode;
+            const normalizedCode = this.enforceNumericLancementInput();
+            this.handleLancementInput();
             
             // Fermer le scanner
             this.closeScanner();
             
             // Notification de succès
-            this.notificationManager.success(`Code scanné: ${cleanCode}`);
+            this.notificationManager.success(`Code scanné: ${normalizedCode}`);
             
             // Valider automatiquement le lancement après un court délai
             setTimeout(() => {
