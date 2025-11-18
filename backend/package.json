@@ -16,7 +16,7 @@
     "test:vitest:coverage": "vitest run --coverage",
     "test:vitest:watch": "vitest --watch",
     "test:ci": "vitest run --reporter=verbose --coverage",
-    "test:integration": "vitest run --config vitest.config.mjs --runInBand",
+    "test:integration": "vitest run --config vitest.config.mjs",
     "lint": "eslint . --ext .js",
     "lint:fix": "eslint . --ext .js --fix",
     "lint:report": "eslint . --ext .js --format json --output-file eslint-report.json",
