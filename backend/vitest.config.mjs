@@ -1,10 +1,19 @@
 import { defineConfig } from 'vitest/config';
-import { webcrypto } from 'node:crypto';
+import { randomFillSync, webcrypto } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-if (!globalThis.crypto || typeof globalThis.crypto.getRandomValues !== 'function') {
-  globalThis.crypto = webcrypto;
+if (!globalThis.crypto) {
+  globalThis.crypto = webcrypto ?? {};
+}
+
+if (typeof globalThis.crypto.getRandomValues !== 'function') {
+  globalThis.crypto.getRandomValues = (typedArray) => {
+    if (!typedArray || typeof typedArray.length !== 'number') {
+      throw new TypeError('Expected typed array');
+    }
+    return randomFillSync(typedArray);
+  };
 }
 
 const __filename = fileURLToPath(import.meta.url);
