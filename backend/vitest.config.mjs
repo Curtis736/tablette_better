@@ -1,6 +1,11 @@
 import { defineConfig } from 'vitest/config';
+import { webcrypto } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+if (!globalThis.crypto || typeof globalThis.crypto.getRandomValues !== 'function') {
+  globalThis.crypto = webcrypto;
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
