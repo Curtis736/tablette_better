@@ -143,9 +143,12 @@ jobs:
       run: |
         cd backend
         npm run start &
-        sleep 3
-        curl -f http://localhost:3001/api/health || exit 1
-        pkill -f "node server.js"
+        # Laisser le temps au serveur de démarrer
+        sleep 5
+        # Utilise le script Node qui détecte automatiquement le bon port
+        npm run test:health
+        # Arrêt propre du backend (ne pas échouer si déjà arrêté)
+        pkill -f "node server.js" || true
         
     - name: Build frontend
       run: |
