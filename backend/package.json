@@ -22,7 +22,7 @@
     "lint:fix": "eslint . --ext .js --fix",
     "lint:report": "eslint . --ext .js --format json --output-file eslint-report.json",
     "test:security": "node scripts/security-test.js || echo 'Security tests skipped (server not running)'",
-    "test:health": "curl -f http://localhost:3001/api/health || echo 'Health check skipped (server not running)'",
+    "test:health": "node scripts/health-check.js || echo 'Health check skipped (server not running)'",
     "sonar": "sonar-scanner",
     "quality": "npm run lint:report && npm run sonar",
     "test:full": "npm run test:all && npm run quality"

@@ -72,7 +72,7 @@ if ($port8080) {
 Start-Sleep -Seconds 2
 
 # Démarrer le backend dans une nouvelle fenêtre
-Write-Host "🔧 Démarrage du backend sur le port 3001..." -ForegroundColor Cyan
+Write-Host "🔧 Démarrage du backend sur le port 3033 (mode développement)..." -ForegroundColor Cyan
 $backendScript = @"
 cd `"$backendDir`"
 `$env:NODE_ENV = 'development'
@@ -98,13 +98,15 @@ Write-Host ""
 Write-Host "✅ Application démarrée !" -ForegroundColor Green
 Write-Host ""
 Write-Host "📊 URLs d'accès:" -ForegroundColor Yellow
-Write-Host "   Backend API:  http://localhost:3001" -ForegroundColor White
+Write-Host "   Backend API:  http://localhost:3033" -ForegroundColor White
 Write-Host "   Frontend Web: http://localhost:8080" -ForegroundColor White
-Write-Host "   Health Check: http://localhost:3001/api/health" -ForegroundColor White
+Write-Host "   Health Check: http://localhost:3033/api/health" -ForegroundColor White
 Write-Host ""
 Write-Host "💡 Les serveurs tournent dans des fenêtres PowerShell séparées." -ForegroundColor Cyan
 Write-Host "   Pour arrêter les serveurs, fermez les fenêtres ou appuyez sur Ctrl+C dans chaque fenêtre." -ForegroundColor Cyan
 Write-Host ""
+
+
 
 
 

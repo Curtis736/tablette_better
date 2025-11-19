@@ -48,9 +48,9 @@ ENV NODE_ENV=production \
     CACHE_ENABLED=true \
     LOG_LEVEL=info
 
-# Health check optimisé
+# Health check optimisé (respecte la variable d'env PORT)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:3001/api/health || exit 1
+    CMD node scripts/health-check.js || exit 1
 
 # Labels pour la traçabilité
 LABEL maintainer="SEDI Team" \
