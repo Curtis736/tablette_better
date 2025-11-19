@@ -180,3 +180,25 @@ jobs:
         echo "Lint: ${{ needs.lint.result }}"
         echo "Build: ${{ needs.build.result }}"
         exit 1
+
+  deploy:
+    name: Deploy to serveurproduction
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.ref == 'refs/heads/master'
+
+    steps:
+    - name: Deploy via SSH
+      uses: appleboy/ssh-action@v1.1.0
+      with:
+        host: ${{ secrets.PROD_HOST }}
+        username: ${{ secrets.PROD_USER }}
+        port: ${{ secrets.PROD_PORT }}
+        password: ${{ secrets.PROD_PASSWORD }}
+        script: |
+          cd tablette_better
+          git pull
+          chmod +x docker/rebuild-images.sh
+          ./docker/rebuild-images.sh
+          cd docker
+          docker compose -f docker-compose.production.yml up -d
