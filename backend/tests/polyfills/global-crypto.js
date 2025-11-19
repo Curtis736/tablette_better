@@ -1,4 +1,4 @@
-const { webcrypto, randomFillSync } = require('node:crypto');
+import { randomFillSync, webcrypto } from 'node:crypto';
 
 if (!globalThis.crypto) {
   globalThis.crypto = webcrypto ? { ...webcrypto } : {};

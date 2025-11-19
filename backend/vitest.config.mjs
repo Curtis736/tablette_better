@@ -1,3 +1,4 @@
+import './tests/polyfills/global-crypto.js';
 import { defineConfig } from 'vitest/config';
 import { randomFillSync, webcrypto } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
