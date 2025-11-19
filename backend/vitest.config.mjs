@@ -1,6 +1,18 @@
 import { defineConfig } from 'vitest/config';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const coverageProviderModule = resolve(
+  __dirname,
+  'node_modules/@vitest/coverage-v8/dist/index.js'
+);
 
 export default defineConfig({
+  resolve: {
+    preserveSymlinks: true
+  },
   test: {
     environment: 'node',
     include: ['**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
@@ -9,7 +21,8 @@ export default defineConfig({
     hookTimeout: 10000,
     reporter: ['verbose'],
     coverage: {
-      provider: 'v8',
+      provider: 'custom',
+      customProviderModule: coverageProviderModule,
       reporter: ['text', 'json', 'html', 'lcov'],
       reportsDirectory: './coverage',
       include: ['**/*.js'],
