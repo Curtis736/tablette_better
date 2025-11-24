@@ -183,7 +183,7 @@ jobs:
 
   deploy:
     name: Deploy to serveurproduction
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     needs: [build]
     if: github.ref == 'refs/heads/master'
 
