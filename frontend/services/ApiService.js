@@ -6,13 +6,24 @@ class ApiService {
         const currentHost = window.location.hostname;
         
         // Détection de l'environnement - FORCER LOCALHOST EN DÉVELOPPEMENT
-        // Seulement si on est sur localhost:8080 ET qu'on a accès direct au backend (dev local sans Docker)
-        const isLocalDev = (currentHost === 'localhost' || currentHost === '127.0.0.1') && currentPort === '8080';
+        // Par défaut on passe par Nginx (Docker/prod). On ne force une connexion directe que
+        // dans les scénarios de dev (ports Vite/React) ou si l'utilisateur l'a demandé explicitement.
+        const searchParams = new URLSearchParams(window.location.search);
+        const forceLocalBackend =
+            searchParams.has('directBackend') ||
+            window.localStorage?.getItem('sedi_force_local_backend') === '1';
+        const devPorts = new Set(['5173', '4173', '3000', '5174']);
+        const isClassicDevPort = devPorts.has(currentPort);
+        const isLocalHost = currentHost === 'localhost' || currentHost === '127.0.0.1';
+        const isLocalDev = forceLocalBackend || (isLocalHost && isClassicDevPort);
         
         if (isLocalDev) {
             // Environnement de développement local - connexion directe au backend
             this.baseUrl = `http://localhost:3033/api`;
             console.log('🔧 Mode développement local détecté - connexion directe au backend');
+            if (forceLocalBackend && !isClassicDevPort) {
+                console.log('⚠️ Force local backend activé via paramètre/stockage');
+            }
         } else {
             // Environnement de production ou Docker - utiliser le proxy Nginx
             // Utiliser toujours le proxy pour éviter les problèmes de CORS et de connexion
