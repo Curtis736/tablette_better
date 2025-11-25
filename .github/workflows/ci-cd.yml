@@ -199,6 +199,33 @@ jobs:
         script: |
           cd tablette_better
           
+          PASS='${{ secrets.PROD_SUDO_PASS }}'
+          runsudo() {
+            echo "$PASS" | sudo -S "$@"
+          }
+          
+          stop_by_port() {
+            local port="$1"
+            ids=$(runsudo docker ps --filter "publish=${port}" --format "{{.ID}}") || true
+            if [ -n "$ids" ]; then
+              while read -r id; do
+                [ -z "$id" ] && continue
+                runsudo docker stop "$id" || true
+              done <<< "$ids"
+            fi
+          }
+          
+          kill_and_remove_sedi() {
+            ids=$(runsudo docker ps -a --filter "name=sedi-" --format "{{.ID}}") || true
+            if [ -n "$ids" ]; then
+              while read -r id; do
+                [ -z "$id" ] && continue
+                runsudo docker kill "$id" || true
+                runsudo docker rm -f "$id" || true
+              done <<< "$ids"
+            fi
+          }
+          
           # Gérer les conflits Git (stash les modifications locales)
           echo "📦 Gestion des modifications locales..."
           git stash || true
@@ -207,54 +234,53 @@ jobs:
           
           # FORCER l'arrêt et la suppression de TOUS les conteneurs sedi- AVANT docker-compose
           echo "🛑 Arrêt forcé de tous les conteneurs sedi- (AVANT docker-compose)..."
-          sudo docker ps -a --filter "name=sedi-" --format "{{.ID}}" | xargs -r sudo docker kill || true
-          sudo docker ps -a --filter "name=sedi-" --format "{{.ID}}" | xargs -r sudo docker rm -f || true
+          kill_and_remove_sedi
           
           # Maintenant on peut faire docker-compose down proprement
           echo "🛑 Arrêt complet via docker-compose..."
           cd docker
-          sudo docker compose -f docker-compose.monitoring.yml down --remove-orphans || true
-          sudo docker compose -f docker-compose.production.yml down --remove-orphans || true
+          runsudo docker compose -f docker-compose.monitoring.yml down --remove-orphans || true
+          runsudo docker compose -f docker-compose.production.yml down --remove-orphans || true
           
           # Arrêter les conteneurs qui utilisent les ports critiques (avec sudo pour éviter permission denied)
           echo "🔌 Libération des ports..."
-          sudo docker ps --filter "publish=9091" --format "{{.ID}}" | xargs -r sudo docker stop || true
-          sudo docker ps --filter "publish=3002" --format "{{.ID}}" | xargs -r sudo docker stop || true
-          sudo docker ps --filter "publish=8080" --format "{{.ID}}" | xargs -r sudo docker stop || true
-          sudo docker ps --filter "publish=3001" --format "{{.ID}}" | xargs -r sudo docker stop || true
+          stop_by_port 9091
+          stop_by_port 3002
+          stop_by_port 8080
+          stop_by_port 3001
           
           # Nettoyage final de tous les conteneurs sedi- restants
           echo "🧹 Nettoyage final des conteneurs sedi-..."
-          sudo docker ps -a --filter "name=sedi-" --format "{{.ID}}" | xargs -r sudo docker rm -f || true
+          kill_and_remove_sedi
           
           # Nettoyer le build cache pour un rebuild complet
           echo "🧹 Nettoyage du build cache..."
-          sudo docker builder prune -f || true
+          runsudo docker builder prune -f || true
           
           # Rebuild complet des images (sans cache)
           echo "🔨 Rebuild complet des images Docker (sans cache)..."
           cd ..
           chmod +x docker/rebuild-images.sh
-          sudo ./docker/rebuild-images.sh
+          runsudo ./docker/rebuild-images.sh
           
           # Supprimer les anciennes images après le rebuild (pour libérer l'espace)
           echo "🗑️  Nettoyage des anciennes images..."
-          sudo docker images | grep -E "docker-sedi-(backend|frontend)" | grep -v "latest" | awk '{print $3}' | xargs -r sudo docker rmi || true
+          runsudo docker images | grep -E "docker-sedi-(backend|frontend)" | grep -v "latest" | awk '{print $3}' | xargs -r runsudo docker rmi || true
           
           # Relancer tous les services
           echo "🚀 Démarrage des services..."
           cd docker
-          sudo docker network create sedi-tablette-network || true
+          runsudo docker network create sedi-tablette-network || true
           
           # Démarrer les services applicatifs
           echo "📦 Démarrage backend + frontend..."
-          sudo docker compose -f docker-compose.production.yml up -d --remove-orphans
+          runsudo docker compose -f docker-compose.production.yml up -d --remove-orphans
           
           # Démarrer les services de monitoring
           echo "📊 Démarrage Prometheus + Grafana..."
-          sudo docker compose -f docker-compose.monitoring.yml up -d --remove-orphans
+          runsudo docker compose -f docker-compose.monitoring.yml up -d --remove-orphans
           
           # Vérification
           echo "✅ Vérification des conteneurs..."
           sleep 5
-          sudo docker ps --filter "name=sedi-"
+          runsudo docker ps --filter "name=sedi-"

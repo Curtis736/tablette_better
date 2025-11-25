@@ -11,18 +11,18 @@ echo ""
 
 # Vérifier que le réseau existe
 echo "📡 Vérification du réseau Docker..."
-sudo docker network create sedi-tablette-network || true
+docker network create sedi-tablette-network || true
 
 # Vérifier que les images existent
 echo ""
 echo "🔍 Vérification des images Docker..."
-if ! sudo docker images | grep -q "docker-sedi-backend:latest"; then
+if ! docker images | grep -q "docker-sedi-backend:latest"; then
     echo "❌ Image docker-sedi-backend:latest introuvable"
     echo "   Exécutez d'abord: ./rebuild-images.sh"
     exit 1
 fi
 
-if ! sudo docker images | grep -q "docker-sedi-frontend:latest"; then
+if ! docker images | grep -q "docker-sedi-frontend:latest"; then
     echo "❌ Image docker-sedi-frontend:latest introuvable"
     echo "   Exécutez d'abord: ./rebuild-images.sh"
     exit 1
@@ -48,13 +48,13 @@ fi
 # Démarrer les services applicatifs
 echo ""
 echo "📦 Démarrage des services applicatifs (backend + frontend)..."
-sudo docker compose -f docker-compose.production.yml up -d
+docker compose -f docker-compose.production.yml up -d
 
 # Démarrer les services de monitoring (si disponible)
 if [ "$MONITORING_AVAILABLE" = true ]; then
     echo ""
     echo "📊 Démarrage des services de monitoring (Prometheus + Grafana)..."
-    sudo docker compose -f docker-compose.monitoring.yml up -d
+    docker compose -f docker-compose.monitoring.yml up -d
 else
     echo ""
     echo "⚠️  Monitoring non démarré (fichier manquant)"
@@ -68,7 +68,7 @@ sleep 5
 # Vérification
 echo ""
 echo "✅ Vérification des conteneurs..."
-sudo docker ps --filter "name=sedi-"
+docker ps --filter "name=sedi-"
 
 echo ""
 echo "🎉 Tous les services sont démarrés!"

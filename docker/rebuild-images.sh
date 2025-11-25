@@ -18,26 +18,26 @@ git pull || true
 # Reconstruire l'image backend (sans cache pour éviter les superpositions)
 echo ""
 echo "🔨 Reconstruction de l'image backend (sans cache)..."
-sudo docker build --no-cache -t docker-sedi-backend:latest -f docker/Dockerfile.backend .
+docker build --no-cache -t docker-sedi-backend:latest -f docker/Dockerfile.backend .
 
 # Reconstruire l'image frontend (sans cache pour éviter les superpositions)
 echo ""
 echo "🔨 Reconstruction de l'image frontend (sans cache)..."
-sudo docker build --no-cache -t docker-sedi-frontend:latest -f docker/Dockerfile.frontend .
+docker build --no-cache -t docker-sedi-frontend:latest -f docker/Dockerfile.frontend .
 
 echo ""
 echo "✅ Images reconstruites avec succès!"
 echo ""
 echo "📋 Images disponibles:"
-sudo docker images | grep -E "docker-sedi-(backend|frontend)"
+docker images | grep -E "docker-sedi-(backend|frontend)"
 
 echo ""
 echo "🔄 Pour redémarrer les conteneurs applicatifs:"
 echo "   cd docker"
-echo "   sudo docker compose -f docker-compose.production.yml up -d"
+echo "   docker compose -f docker-compose.production.yml up -d"
 echo ""
 echo "📊 Pour démarrer le monitoring (Prometheus + Grafana):"
-echo "   sudo docker compose -f docker-compose.monitoring.yml up -d"
+echo "   docker compose -f docker-compose.monitoring.yml up -d"
 
 
 
