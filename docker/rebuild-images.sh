@@ -15,15 +15,15 @@ cd "$PROJECT_ROOT"
 echo "📥 Mise à jour du code..."
 git pull
 
-# Reconstruire l'image backend
+# Reconstruire l'image backend (sans cache pour éviter les superpositions)
 echo ""
-echo "🔨 Reconstruction de l'image backend..."
-docker build -t docker-sedi-backend:latest -f docker/Dockerfile.backend .
+echo "🔨 Reconstruction de l'image backend (sans cache)..."
+docker build --no-cache -t docker-sedi-backend:latest -f docker/Dockerfile.backend .
 
-# Reconstruire l'image frontend
+# Reconstruire l'image frontend (sans cache pour éviter les superpositions)
 echo ""
-echo "🔨 Reconstruction de l'image frontend..."
-docker build -t docker-sedi-frontend:latest -f docker/Dockerfile.frontend .
+echo "🔨 Reconstruction de l'image frontend (sans cache)..."
+docker build --no-cache -t docker-sedi-frontend:latest -f docker/Dockerfile.frontend .
 
 echo ""
 echo "✅ Images reconstruites avec succès!"

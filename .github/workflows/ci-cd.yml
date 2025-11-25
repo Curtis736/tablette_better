@@ -199,9 +199,39 @@ jobs:
         script: |
           cd tablette_better
           git pull
+          
+          # Arrêter et supprimer tous les conteneurs existants pour un rebuild propre
+          echo "🛑 Arrêt des conteneurs existants..."
+          cd docker
+          docker compose -f docker-compose.monitoring.yml down || true
+          docker compose -f docker-compose.production.yml down || true
+          
+          # Supprimer les conteneurs orphelins (au cas où)
+          docker ps -a --filter "name=sedi-" --format "{{.ID}}" | xargs -r docker rm -f || true
+          
+          # Supprimer les images Docker pour éviter les superpositions
+          echo "🗑️  Suppression des images Docker existantes..."
+          docker rmi docker-sedi-backend:latest || true
+          docker rmi docker-sedi-frontend:latest || true
+          
+          # Nettoyer le build cache pour un rebuild complet
+          echo "🧹 Nettoyage du build cache..."
+          docker builder prune -f || true
+          
+          # Rebuild complet des images (sans cache)
+          echo "🔨 Rebuild complet des images Docker (sans cache)..."
+          cd ..
           chmod +x docker/rebuild-images.sh
           ./docker/rebuild-images.sh
+          
+          # Relancer tous les services
+          echo "🚀 Démarrage des services..."
           cd docker
           docker network create sedi-tablette-network || true
           docker compose -f docker-compose.production.yml up -d
           docker compose -f docker-compose.monitoring.yml up -d
+          
+          # Vérification
+          echo "✅ Vérification des conteneurs..."
+          sleep 5
+          docker ps --filter "name=sedi-"
