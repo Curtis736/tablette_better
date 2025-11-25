@@ -202,4 +202,6 @@ jobs:
           chmod +x docker/rebuild-images.sh
           ./docker/rebuild-images.sh
           cd docker
+          docker network create sedi-tablette-network || true
           docker compose -f docker-compose.production.yml up -d
+          docker compose -f docker-compose.monitoring.yml up -d

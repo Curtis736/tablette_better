@@ -32,9 +32,12 @@ echo "📋 Images disponibles:"
 docker images | grep -E "docker-sedi-(backend|frontend)"
 
 echo ""
-echo "🔄 Pour redémarrer les conteneurs:"
+echo "🔄 Pour redémarrer les conteneurs applicatifs:"
 echo "   cd docker"
 echo "   docker compose -f docker-compose.production.yml up -d"
+echo ""
+echo "📊 Pour démarrer le monitoring (Prometheus + Grafana):"
+echo "   docker compose -f docker-compose.monitoring.yml up -d"
 
 
 

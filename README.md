@@ -8,7 +8,7 @@ git clone https://github.com/Curtis736/tablette_better.git
 cd tablette_better
 ```
 
-### 2. Déployer
+### 2. Déployer l'application (frontend + backend)
 ```bash
 docker-compose -f docker/docker-compose.production.yml up -d
 ```
@@ -26,10 +26,18 @@ curl http://localhost:3001/api/health
 curl http://localhost:8080
 ```
 
-## 🌐 URLs d'accès
+### 3. (Optionnel) Démarrer le monitoring (Prometheus + Grafana)
+
+```bash
+docker-compose -f docker/docker-compose.monitoring.yml up -d
+```
+
+## 🌐 URLs d'accès (par défaut en local)
 
 - **Backend API** : http://localhost:3001
 - **Frontend Web** : http://localhost:8080
+- **Prometheus** : http://localhost:9091
+- **Grafana** : http://localhost:3002
 
 ## 🛠️ Commandes utiles
 
