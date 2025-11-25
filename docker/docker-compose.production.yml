@@ -1,6 +1,7 @@
 services:
   backend:
     image: docker-sedi-backend:latest
+    pull_policy: never
     container_name: sedi-tablette-backend
     ports:
       - "3001:3001"
@@ -19,6 +20,7 @@ services:
 
   frontend:
     image: docker-sedi-frontend:latest
+    pull_policy: never
     container_name: sedi-tablette-frontend
     ports:
       - "8080:80"

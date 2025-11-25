@@ -198,15 +198,28 @@ jobs:
         passphrase: ${{ secrets.PROD_SSH_PASSPHRASE }}
         script: |
           cd tablette_better
+          
+          # Gérer les conflits Git (stash les modifications locales)
+          echo "📦 Gestion des modifications locales..."
+          git stash || true
           git pull
+          git stash pop || true
           
-          # Arrêter et supprimer tous les conteneurs existants pour un rebuild propre
-          echo "🛑 Arrêt des conteneurs existants..."
+          # Arrêter TOUS les conteneurs existants (y compris ceux qui utilisent les ports)
+          echo "🛑 Arrêt complet de tous les conteneurs existants..."
           cd docker
-          docker compose -f docker-compose.monitoring.yml down || true
-          docker compose -f docker-compose.production.yml down || true
+          docker compose -f docker-compose.monitoring.yml down --remove-orphans || true
+          docker compose -f docker-compose.production.yml down --remove-orphans || true
           
-          # Supprimer les conteneurs orphelins (au cas où)
+          # Arrêter les conteneurs qui utilisent les ports critiques
+          echo "🔌 Libération des ports..."
+          docker ps --filter "publish=9091" --format "{{.ID}}" | xargs -r docker stop || true
+          docker ps --filter "publish=3002" --format "{{.ID}}" | xargs -r docker stop || true
+          docker ps --filter "publish=8080" --format "{{.ID}}" | xargs -r docker stop || true
+          docker ps --filter "publish=3001" --format "{{.ID}}" | xargs -r docker stop || true
+          
+          # Supprimer tous les conteneurs sedi- (arrêtés ou en cours)
+          echo "🗑️  Suppression de tous les conteneurs sedi-..."
           docker ps -a --filter "name=sedi-" --format "{{.ID}}" | xargs -r docker rm -f || true
           
           # Supprimer les images Docker pour éviter les superpositions
@@ -228,8 +241,12 @@ jobs:
           echo "🚀 Démarrage des services..."
           cd docker
           docker network create sedi-tablette-network || true
-          docker compose -f docker-compose.production.yml up -d
-          docker compose -f docker-compose.monitoring.yml up -d
+          
+          # Build les images avec docker-compose avant de les lancer
+          docker compose -f docker-compose.production.yml build --no-cache || true
+          docker compose -f docker-compose.production.yml up -d --remove-orphans
+          
+          docker compose -f docker-compose.monitoring.yml up -d --remove-orphans
           
           # Vérification
           echo "✅ Vérification des conteneurs..."
