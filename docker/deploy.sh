@@ -9,6 +9,7 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 DOCKER_DIR="${PROJECT_ROOT}/docker"
 
 COMPOSE_PROJECT="${COMPOSE_PROJECT:-sedi-tablette}"
+MONITOR_PROJECT="${MONITOR_PROJECT:-sedi-tablette-monitoring}"
 NETWORK_NAME="${NETWORK_NAME:-sedi-tablette-network}"
 PROD_COMPOSE="${DOCKER_DIR}/docker-compose.production.yml"
 MONITOR_COMPOSE="${DOCKER_DIR}/docker-compose.monitoring.yml"
@@ -51,17 +52,20 @@ ensure_network() {
 
 compose_down() {
   local file="$1"
-  docker compose -p "$COMPOSE_PROJECT" -f "$file" down --remove-orphans --timeout 45 || true
+  local project="$2"
+  docker compose -p "$project" -f "$file" down --remove-orphans --timeout 45 || true
 }
 
 compose_up() {
   local file="$1"
-  docker compose -p "$COMPOSE_PROJECT" -f "$file" up -d --remove-orphans
+  local project="$2"
+  docker compose -p "$project" -f "$file" up -d --remove-orphans
 }
 
 force_cleanup() {
   log "🧹 Nettoyage des conteneurs restants (fallback)"
   docker ps -a --filter "name=${COMPOSE_PROJECT}" --format "{{.ID}}" | xargs -r docker rm -f || true
+  docker ps -a --filter "name=${MONITOR_PROJECT}" --format "{{.ID}}" | xargs -r docker rm -f || true
   docker ps -a --filter "name=sedi-" --format "{{.ID}}" | xargs -r docker rm -f || true
 }
 
@@ -77,11 +81,11 @@ fi
 ensure_network
 
 log "🛑 Arrêt contrôlé des services applicatifs"
-compose_down "$PROD_COMPOSE"
+compose_down "$PROD_COMPOSE" "$COMPOSE_PROJECT"
 
 if [[ -f "$MONITOR_COMPOSE" ]]; then
   log "🛑 Arrêt contrôlé du monitoring"
-  compose_down "$MONITOR_COMPOSE"
+  compose_down "$MONITOR_COMPOSE" "$MONITOR_PROJECT"
 fi
 
 force_cleanup
@@ -94,16 +98,19 @@ else
 fi
 
 log "🚀 Démarrage des services applicatifs"
-compose_up "$PROD_COMPOSE"
+compose_up "$PROD_COMPOSE" "$COMPOSE_PROJECT"
 
 if [[ -f "$MONITOR_COMPOSE" ]]; then
   log "📊 Démarrage du monitoring"
-  compose_up "$MONITOR_COMPOSE"
+  compose_up "$MONITOR_COMPOSE" "$MONITOR_PROJECT"
 else
   log "ℹ️  Monitoring non démarré (fichier absent)"
 fi
 
 log "✅ État des conteneurs"
 docker ps --filter "name=${COMPOSE_PROJECT}"
+if [[ -f "$MONITOR_COMPOSE" ]]; then
+  docker ps --filter "name=${MONITOR_PROJECT}"
+fi
 docker ps --filter "name=sedi-"
 

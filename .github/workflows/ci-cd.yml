@@ -259,7 +259,7 @@ jobs:
 
             echo "🚀 Déploiement orchestré..."
             chmod +x docker/deploy.sh
-            COMPOSE_PROJECT=sedi-tablette NETWORK_NAME=sedi-tablette-network ./docker/deploy.sh
+            COMPOSE_PROJECT=sedi-tablette MONITOR_PROJECT=sedi-tablette-monitoring NETWORK_NAME=sedi-tablette-network ./docker/deploy.sh
 
             echo "✅ Vérification des conteneurs..."
             docker ps --filter "name=sedi-"
