@@ -56,3 +56,18 @@ docker-compose -f docker/docker-compose.production.yml restart
 
 - Docker et Docker Compose installés
 - Ports 3001 et 8080 disponibles
+
+## 🧑‍💻 Déploiement serveur (CI/CD)
+
+Pour un déploiement complet (arrêt propre, rebuild des images, relance des stacks production + monitoring), le workflow CI comme les opérateurs peuvent appeler :
+
+```bash
+cd docker
+sudo ./deploy.sh
+```
+
+Le script s'occupe de :
+- vérifier/créer le réseau `sedi-tablette-network`,
+- arrêter les stacks existantes via `docker compose down` puis tuer les conteneurs récalcitrants,
+- relancer les builds via `rebuild-images.sh`,
+- redémarrer `docker-compose.production.yml` puis `docker-compose.monitoring.yml`.

@@ -6,281 +6,265 @@ on:
   pull_request:
     branches: [ master, main ]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  test:
-    name: Run Tests
+  backend-tests:
+    name: Backend Tests (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
-    
     strategy:
       matrix:
         # Node 18+ provides globalThis.crypto.getRandomValues nativement,
         # ce qui évite les erreurs de démarrage de Vitest/Vite.
         node-version: [18.x, 20.x]
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-        cache-dependency-path: 'backend/package-lock.json'
-        
-    - name: Install backend dependencies
-      run: |
-        cd backend
-        npm ci
-        
-    - name: Install frontend dependencies
-      run: |
-        cd frontend
-        npm ci
-        
-    - name: Run backend tests
-      run: |
-        cd backend
-        npm run test:ci
-        
-    - name: Upload test coverage
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./backend/coverage/lcov.info
-        flags: backend
-        name: backend-coverage
-        
-    - name: Check frontend build
-      run: |
-        cd frontend
-        npm run start &
-        sleep 5
-        curl -f http://localhost:8080 || exit 1
-        pkill -f "http-server"
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  security:
-    name: Security Audit
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run backend tests
+        working-directory: backend
+        run: npm run test:ci
+
+      - name: Upload test coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./backend/coverage/lcov.info
+          flags: backend
+          name: backend-coverage
+
+  frontend-smoke:
+    name: Frontend Smoke Test
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18.x'
-        cache: 'npm'
-        cache-dependency-path: 'backend/package-lock.json'
-        
-    - name: Install dependencies
-      run: |
-        cd backend
-        npm ci
-        
-    - name: Run security audit
-      run: |
-        cd backend
-        npm audit --audit-level=high
-        
-    - name: Run frontend security audit
-      run: |
-        cd frontend
-        npm ci
-        npm audit --audit-level=high
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Verify frontend can serve assets
+        working-directory: frontend
+        env:
+          FRONTEND_PORT: 8080
+        run: |
+          npm run start >/tmp/frontend.log 2>&1 &
+          FRONT_PID=$!
+          cleanup() {
+            kill $FRONT_PID 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          sleep 5
+          curl -f "http://127.0.0.1:${FRONTEND_PORT}" >/dev/null
 
   lint:
     name: Code Quality
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18.x'
-        cache: 'npm'
-        cache-dependency-path: 'backend/package-lock.json'
-        
-    - name: Install backend dependencies
-      run: |
-        cd backend
-        npm ci
-        
-    - name: Check package.json syntax
-      run: |
-        cd backend
-        node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8'))"
-        cd ../frontend
-        node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8'))"
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  build:
-    name: Build Check
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Validate package.json files
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('backend/package.json', 'utf8'))"
+          node -e "JSON.parse(require('fs').readFileSync('frontend/package.json', 'utf8'))"
+
+  security:
+    name: Security Audit
     runs-on: ubuntu-latest
-    needs: [test, security, lint]
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18.x'
-        cache: 'npm'
-        cache-dependency-path: 'backend/package-lock.json'
-        
-    - name: Install dependencies
-      run: |
-        cd backend
-        npm ci
-        cd ../frontend
-        npm ci
-        
-    - name: Build backend
-      run: |
-        cd backend
-        npm run start &
-        # Laisser le temps au serveur de démarrer
-        sleep 5
-        # Utilise le script Node qui détecte automatiquement le bon port
-        npm run test:health
-        # Arrêt propre du backend (ne pas échouer si déjà arrêté)
-        pkill -f "node server.js" || true
-        
-    - name: Build frontend
-      run: |
-        cd frontend
-        npm run start &
-        sleep 3
-        curl -f http://localhost:8080 || exit 1
-        pkill -f "http-server"
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run backend audit
+        working-directory: backend
+        run: npm audit --audit-level=high
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend audit
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+  runtime-check:
+    name: Runtime Smoke Tests
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-smoke, lint]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Backend health script
+        working-directory: backend
+        env:
+          NODE_ENV: production
+        run: |
+          npm run start >/tmp/backend.log 2>&1 &
+          BACKEND_PID=$!
+          cleanup() {
+            kill $BACKEND_PID 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          sleep 5
+          npm run test:health
+
+      - name: Frontend availability check
+        working-directory: frontend
+        env:
+          FRONTEND_PORT: 8080
+        run: |
+          npm run start >/tmp/frontend.log 2>&1 &
+          FRONT_PID=$!
+          cleanup() {
+            kill $FRONT_PID 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          sleep 3
+          curl -f "http://127.0.0.1:${FRONTEND_PORT}" >/dev/null
+
+  docker-build:
+    name: Docker Build Validation
+    runs-on: ubuntu-latest
+    needs: [runtime-check, security]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.backend
+          push: false
+          tags: sedi-tablette-backend:${{ github.sha }}
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.frontend
+          push: false
+          tags: sedi-tablette-frontend:${{ github.sha }}
 
   notify:
     name: Notify Results
     runs-on: ubuntu-latest
-    needs: [test, security, lint, build]
+    needs: [backend-tests, frontend-smoke, lint, security, runtime-check, docker-build]
     if: always()
-    
     steps:
-    - name: Notify Success
-      if: ${{ needs.test.result == 'success' && needs.security.result == 'success' && needs.lint.result == 'success' && needs.build.result == 'success' }}
-      run: |
-        echo "✅ All checks passed successfully!"
-        echo "🎉 CI/CD Pipeline completed successfully"
-        
-    - name: Notify Failure
-      if: ${{ needs.test.result == 'failure' || needs.security.result == 'failure' || needs.lint.result == 'failure' || needs.build.result == 'failure' }}
-      run: |
-        echo "❌ Some checks failed:"
-        echo "Test: ${{ needs.test.result }}"
-        echo "Security: ${{ needs.security.result }}"
-        echo "Lint: ${{ needs.lint.result }}"
-        echo "Build: ${{ needs.build.result }}"
-        exit 1
+      - name: Notify Success
+        if: ${{ needs.backend-tests.result == 'success' && needs.frontend-smoke.result == 'success' && needs.lint.result == 'success' && needs.security.result == 'success' && needs.runtime-check.result == 'success' && needs.docker-build.result == 'success' }}
+        run: |
+          echo "✅ All checks passed successfully!"
+          echo "🎉 CI/CD Pipeline completed successfully"
+
+      - name: Notify Failure
+        if: ${{ needs.backend-tests.result == 'failure' || needs.frontend-smoke.result == 'failure' || needs.lint.result == 'failure' || needs.security.result == 'failure' || needs.runtime-check.result == 'failure' || needs.docker-build.result == 'failure' }}
+        run: |
+          echo "❌ Some checks failed:"
+          echo "Backend tests: ${{ needs.backend-tests.result }}"
+          echo "Frontend smoke: ${{ needs.frontend-smoke.result }}"
+          echo "Lint: ${{ needs.lint.result }}"
+          echo "Security: ${{ needs.security.result }}"
+          echo "Runtime check: ${{ needs.runtime-check.result }}"
+          echo "Docker build: ${{ needs.docker-build.result }}"
+          exit 1
 
   deploy:
     name: Deploy to serveurproduction
     runs-on: [self-hosted, Linux, X64]
-    needs: [build]
+    needs: [docker-build, notify]
     if: github.ref == 'refs/heads/master'
-
     steps:
-    - name: Deploy via SSH
-      uses: appleboy/ssh-action@v1.1.0
-      with:
-        host: ${{ secrets.PROD_HOST }}
-        username: ${{ secrets.PROD_USER }}
-        port: ${{ secrets.PROD_PORT }}
-        key: ${{ secrets.PROD_SSH_KEY }}
-        passphrase: ${{ secrets.PROD_SSH_PASSPHRASE }}
-        script: |
-          cd tablette_better
-          
-          PASS='${{ secrets.PROD_SUDO_PASS }}'
-          runsudo() {
-            echo "$PASS" | sudo -S "$@"
-          }
-          
-          stop_by_port() {
-            local port="$1"
-            ids=$(runsudo docker ps --filter "publish=${port}" --format "{{.ID}}") || true
-            if [ -n "$ids" ]; then
-              while read -r id; do
-                [ -z "$id" ] && continue
-                runsudo docker stop "$id" || true
-              done <<< "$ids"
-            fi
-          }
-          
-          kill_and_remove_sedi() {
-            ids=$(runsudo docker ps -a --filter "name=sedi-" --format "{{.ID}}") || true
-            if [ -n "$ids" ]; then
-              while read -r id; do
-                [ -z "$id" ] && continue
-                runsudo docker kill "$id" || true
-                runsudo docker rm -f "$id" || true
-              done <<< "$ids"
-            fi
-          }
-          
-          # Gérer les conflits Git (stash les modifications locales)
-          echo "📦 Gestion des modifications locales..."
-          git stash || true
-          git pull
-          git stash pop || true
-          
-          # FORCER l'arrêt et la suppression de TOUS les conteneurs sedi- AVANT docker-compose
-          echo "🛑 Arrêt forcé de tous les conteneurs sedi- (AVANT docker-compose)..."
-          kill_and_remove_sedi
-          
-          # Maintenant on peut faire docker-compose down proprement
-          echo "🛑 Arrêt complet via docker-compose..."
-          cd docker
-          runsudo docker compose -f docker-compose.monitoring.yml down --remove-orphans || true
-          runsudo docker compose -f docker-compose.production.yml down --remove-orphans || true
-          
-          # Arrêter les conteneurs qui utilisent les ports critiques (avec sudo pour éviter permission denied)
-          echo "🔌 Libération des ports..."
-          stop_by_port 9091
-          stop_by_port 3002
-          stop_by_port 8080
-          stop_by_port 3001
-          
-          # Nettoyage final de tous les conteneurs sedi- restants
-          echo "🧹 Nettoyage final des conteneurs sedi-..."
-          kill_and_remove_sedi
-          
-          # Nettoyer le build cache pour un rebuild complet
-          echo "🧹 Nettoyage du build cache..."
-          runsudo docker builder prune -f || true
-          
-          # Rebuild complet des images (sans cache)
-          echo "🔨 Rebuild complet des images Docker (sans cache)..."
-          cd ..
-          chmod +x docker/rebuild-images.sh
-          runsudo ./docker/rebuild-images.sh
-          
-          # Supprimer les anciennes images après le rebuild (pour libérer l'espace)
-          echo "🗑️  Nettoyage des anciennes images..."
-          runsudo docker images | grep -E "docker-sedi-(backend|frontend)" | grep -v "latest" | awk '{print $3}' | xargs -r runsudo docker rmi || true
-          
-          # Relancer tous les services
-          echo "🚀 Démarrage des services..."
-          cd docker
-          runsudo docker network create sedi-tablette-network || true
-          
-          # Démarrer les services applicatifs
-          echo "📦 Démarrage backend + frontend..."
-          runsudo docker compose -f docker-compose.production.yml up -d --remove-orphans
-          
-          # Démarrer les services de monitoring
-          echo "📊 Démarrage Prometheus + Grafana..."
-          runsudo docker compose -f docker-compose.monitoring.yml up -d --remove-orphans
-          
-          # Vérification
-          echo "✅ Vérification des conteneurs..."
-          sleep 5
-          runsudo docker ps --filter "name=sedi-"
+      - name: Checkout workflow files
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          port: ${{ secrets.PROD_PORT }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          passphrase: ${{ secrets.PROD_SSH_PASSPHRASE }}
+          script: |
+            cd tablette_better
+
+            PASS='${{ secrets.PROD_SUDO_PASS }}'
+            runsudo() {
+              echo "$PASS" | sudo -S "$@"
+            }
+
+            echo "📦 Gestion des modifications locales..."
+            git stash || true
+            git pull
+            git stash pop || true
+
+            echo "🚀 Déploiement orchestré..."
+            runsudo chmod +x docker/deploy.sh
+            runsudo COMPOSE_PROJECT=sedi-tablette NETWORK_NAME=sedi-tablette-network ./docker/deploy.sh
+
+            echo "✅ Vérification des conteneurs..."
+            runsudo docker ps --filter "name=sedi-"
