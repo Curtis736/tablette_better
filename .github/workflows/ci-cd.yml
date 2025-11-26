@@ -252,19 +252,14 @@ jobs:
           script: |
             cd tablette_better
 
-            PASS='${{ secrets.PROD_SUDO_PASS }}'
-            runsudo() {
-              echo "$PASS" | sudo -S "$@"
-            }
-
             echo "📦 Gestion des modifications locales..."
             git stash || true
             git pull
             git stash pop || true
 
             echo "🚀 Déploiement orchestré..."
-            runsudo chmod +x docker/deploy.sh
-            runsudo COMPOSE_PROJECT=sedi-tablette NETWORK_NAME=sedi-tablette-network ./docker/deploy.sh
+            chmod +x docker/deploy.sh
+            COMPOSE_PROJECT=sedi-tablette NETWORK_NAME=sedi-tablette-network ./docker/deploy.sh
 
             echo "✅ Vérification des conteneurs..."
-            runsudo docker ps --filter "name=sedi-"
+            docker ps --filter "name=sedi-"

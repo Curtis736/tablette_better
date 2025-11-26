@@ -18,6 +18,20 @@ log() {
   printf '[%(%Y-%m-%d %H:%M:%S)T] %s\n' -1 "$*"
 }
 
+ensure_docker_access() {
+  if docker info >/dev/null 2>&1; then
+    return
+  fi
+
+  log "❌ Impossible d'accéder au daemon Docker avec l'utilisateur $(whoami)."
+  if [[ "$EUID" -eq 0 ]]; then
+    log "ℹ️  Docker semble tourner en mode rootless. Relancez ce script sans sudo."
+  else
+    log "ℹ️  Vérifiez que $(whoami) appartient au groupe docker ou que DOCKER_HOST est correctement défini."
+  fi
+  exit 1
+}
+
 require_file() {
   local file="$1"
   if [[ ! -f "$file" ]]; then
@@ -52,6 +66,7 @@ force_cleanup() {
 }
 
 log "🔍 Validation des prérequis..."
+ensure_docker_access
 require_file "$PROD_COMPOSE"
 if [[ -x "$REBUILD_SCRIPT" ]]; then
   log "🔧 Script de rebuild détecté"

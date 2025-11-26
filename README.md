@@ -63,7 +63,9 @@ Pour un déploiement complet (arrêt propre, rebuild des images, relance des sta
 
 ```bash
 cd docker
-sudo ./deploy.sh
+./deploy.sh
+# Si Docker nécessite les droits root sur votre serveur :
+# sudo ./deploy.sh
 ```
 
 Le script s'occupe de :
@@ -71,3 +73,4 @@ Le script s'occupe de :
 - arrêter les stacks existantes via `docker compose down` puis tuer les conteneurs récalcitrants,
 - relancer les builds via `rebuild-images.sh`,
 - redémarrer `docker-compose.production.yml` puis `docker-compose.monitoring.yml`.
+- détecter automatiquement si Docker n'est pas accessible (ex: script lancé avec sudo alors que Docker est rootless) et vous guider.
