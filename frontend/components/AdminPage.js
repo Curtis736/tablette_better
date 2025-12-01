@@ -213,15 +213,22 @@ class AdminPage {
             } else if (timeSinceLastEdit <= 5000) {
                 console.log(`⏸️ Rechargement automatique ignoré (édition récente il y a ${Math.round(timeSinceLastEdit/1000)}s)`);
             }
-        }, 10000); // Toutes les 10 secondes au lieu de 60
+        }, 15000); // Toutes les 15 secondes (réduit pour éviter le rate limiting)
 
-        // Mise à jour temps réel des opérateurs connectés
+        // Mise à jour temps réel des opérateurs connectés (réduit pour éviter le rate limiting)
+        this.lastOperatorsUpdate = 0; // Timestamp de la dernière mise à jour des opérateurs
         this.operatorsInterval = setInterval(() => {
             // Ne pas mettre à jour si trop d'erreurs
             if (this.consecutiveErrors < this.maxConsecutiveErrors) {
+                // Vérifier si on a des données récentes (< 10 secondes) pour éviter les requêtes redondantes
+                const timeSinceLastUpdate = Date.now() - this.lastOperatorsUpdate;
+                if (timeSinceLastUpdate < 10000) {
+                    console.log(`⏸️ Mise à jour opérateurs ignorée (données récentes il y a ${Math.round(timeSinceLastUpdate/1000)}s)`);
+                    return;
+                }
                 this.updateOperatorsStatus();
             }
-        }, 5000); // Toutes les 5 secondes
+        }, 15000); // Toutes les 15 secondes (au lieu de 5) pour réduire le rate limiting
     }
 
     async loadData() {
@@ -289,9 +296,11 @@ class AdminPage {
             // Mettre à jour le menu déroulant des opérateurs
             if (operatorsData && operatorsData.success && operatorsData.operators) {
                 this.updateOperatorSelect(operatorsData.operators);
+                this.lastOperatorsUpdate = Date.now(); // Mettre à jour le timestamp
             } else if (operatorsData && operatorsData.operators) {
                 // Fallback si success n'est pas défini
                 this.updateOperatorSelect(operatorsData.operators);
+                this.lastOperatorsUpdate = Date.now(); // Mettre à jour le timestamp
             }
             
             console.log('🔄 APPEL updateStats()');
@@ -516,16 +525,29 @@ class AdminPage {
 
     // Nouvelle méthode pour mettre à jour le statut des opérateurs
     async updateOperatorsStatus() {
+        // Éviter les requêtes si on vient de recevoir une erreur 429 récemment
+        const timeSinceLastUpdate = Date.now() - this.lastOperatorsUpdate;
+        if (timeSinceLastUpdate < 10000) {
+            console.log(`⏸️ Mise à jour opérateurs ignorée (données récentes)`);
+            return;
+        }
+        
         try {
             const response = await this.apiService.getConnectedOperators();
             if (response.success && response.operators) {
                 this.updateOperatorSelect(response.operators);
+                this.lastOperatorsUpdate = Date.now(); // Mettre à jour le timestamp
                 
                 // Mettre à jour l'affichage des opérateurs actifs
                 this.updateActiveOperatorsDisplay(response.operators);
             }
         } catch (error) {
             console.error('Erreur lors de la mise à jour du statut des opérateurs:', error);
+            // En cas d'erreur 429, attendre plus longtemps avant la prochaine tentative
+            if (error.message && error.message.includes('Trop de requêtes')) {
+                this.lastOperatorsUpdate = Date.now() - 5000; // Forcer une attente de 15 secondes minimum
+                console.log('⏸️ Rate limit détecté, attente prolongée avant la prochaine mise à jour');
+            }
         }
     }
 

@@ -41,6 +41,10 @@ class ApiService {
         this.lastRequestTime = 0;
         this.minRequestInterval = 100; // 100ms minimum entre les requêtes
         
+        // Cache simple pour éviter les requêtes redondantes
+        this.cache = new Map();
+        this.cacheTimeout = 10000; // 10 secondes de cache par défaut
+        
         console.log(`🔗 ApiService configuré pour: ${this.baseUrl}`);
         console.log(`🔍 Host détecté: ${currentHost}:${currentPort}`);
     }
@@ -300,9 +304,27 @@ class ApiService {
         return this.get('/admin/tables-info');
     }
 
-    // Récupérer la liste des opérateurs connectés
-    async getConnectedOperators() {
-        return this.get('/admin/operators');
+    // Récupérer la liste des opérateurs connectés (avec cache pour éviter le rate limiting)
+    async getConnectedOperators(forceRefresh = false) {
+        const cacheKey = '/admin/operators';
+        const cached = this.cache.get(cacheKey);
+        
+        // Utiliser le cache si disponible et récent (< 10 secondes) et qu'on ne force pas le refresh
+        if (!forceRefresh && cached && (Date.now() - cached.timestamp) < 10000) {
+            console.log('📦 Utilisation du cache pour /admin/operators');
+            return cached.data;
+        }
+        
+        // Faire la requête
+        const data = await this.get('/admin/operators');
+        
+        // Mettre en cache
+        this.cache.set(cacheKey, {
+            data: data,
+            timestamp: Date.now()
+        });
+        
+        return data;
     }
 
     // Récupérer les lancements d'un opérateur spécifique
