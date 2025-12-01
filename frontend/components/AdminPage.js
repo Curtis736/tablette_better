@@ -1,6 +1,5 @@
 // Page d'administration - v20251014-fixed-v4
 import TimeUtils from '../utils/TimeUtils.js';
-import LogViewer from './LogViewer.js';
 
 class AdminPage {
     constructor(app) {
@@ -26,15 +25,6 @@ class AdminPage {
         this.initializeElements();
         this.setupEventListeners();
         this.startAutoSave();
-        
-        // Initialize Log Viewer
-        try {
-            this.logViewer = new LogViewer(app);
-            // Make it globally accessible for the onclick handlers
-            window.logViewer = this.logViewer;
-        } catch (error) {
-            console.error('Error initializing LogViewer:', error);
-        }
     }
 
     initializeElements() {
