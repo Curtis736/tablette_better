@@ -53,20 +53,134 @@ ensure_network() {
 compose_down() {
   local file="$1"
   local project="$2"
-  docker compose -p "$project" -f "$file" down --remove-orphans --timeout 45 || true
+  
+  # Essayer d'abord sans sudo
+  if docker compose -p "$project" -f "$file" down --remove-orphans --timeout 45 2>/dev/null; then
+    return 0
+  fi
+  
+  # Si ça échoue avec "permission denied", essayer avec sudo
+  local error_output
+  error_output=$(docker compose -p "$project" -f "$file" down --remove-orphans --timeout 45 2>&1 || true)
+  
+  if echo "$error_output" | grep -q "permission denied"; then
+    log "⚠️  Permission denied détectée, tentative avec sudo..."
+    if command -v sudo >/dev/null 2>&1; then
+      sudo docker compose -p "$project" -f "$file" down --remove-orphans --timeout 45 || true
+    else
+      log "❌ sudo non disponible. Arrêt manuel requis."
+      return 1
+    fi
+  fi
 }
 
 compose_up() {
   local file="$1"
   local project="$2"
-  docker compose -p "$project" -f "$file" up -d --remove-orphans
+  
+  # Essayer d'abord sans sudo
+  if docker compose -p "$project" -f "$file" up -d --remove-orphans 2>/dev/null; then
+    return 0
+  fi
+  
+  # Si ça échoue avec "permission denied" ou "cannot stop", nettoyer d'abord
+  local error_output
+  error_output=$(docker compose -p "$project" -f "$file" up -d --remove-orphans 2>&1 || true)
+  
+  if echo "$error_output" | grep -qE "(permission denied|cannot stop)"; then
+    log "⚠️  Conflit avec conteneurs root-owned détecté, nettoyage préalable..."
+    cleanup_root_containers || true
+    
+    # Réessayer après nettoyage
+    log "🔄 Nouvelle tentative de démarrage..."
+    docker compose -p "$project" -f "$file" up -d --remove-orphans || {
+      log "❌ Échec du démarrage. Vérifiez les permissions Docker."
+      return 1
+    }
+  else
+    # Autre erreur, la propager
+    echo "$error_output" >&2
+    return 1
+  fi
+}
+
+# Nettoyer les conteneurs root-owned avec sudo si nécessaire
+cleanup_root_containers() {
+  local container_ids=()
+  
+  # Collecter tous les IDs de conteneurs
+  while IFS= read -r id; do
+    [[ -n "$id" ]] && container_ids+=("$id")
+  done < <(docker ps -a --filter "name=${COMPOSE_PROJECT}" --format "{{.ID}}" 2>/dev/null || true)
+  
+  while IFS= read -r id; do
+    [[ -n "$id" ]] && container_ids+=("$id")
+  done < <(docker ps -a --filter "name=${MONITOR_PROJECT}" --format "{{.ID}}" 2>/dev/null || true)
+  
+  while IFS= read -r id; do
+    [[ -n "$id" ]] && container_ids+=("$id")
+  done < <(docker ps -a --filter "name=sedi-" --format "{{.ID}}" 2>/dev/null || true)
+  
+  if [[ ${#container_ids[@]} -eq 0 ]]; then
+    return 0
+  fi
+  
+  # Essayer d'arrêter chaque conteneur, et utiliser sudo si permission denied
+  local needs_sudo=false
+  for id in "${container_ids[@]}"; do
+    if ! docker stop "$id" 2>/dev/null; then
+      local error_msg
+      error_msg=$(docker stop "$id" 2>&1 || true)
+      if echo "$error_msg" | grep -qE "(permission denied|cannot stop)"; then
+        needs_sudo=true
+        log "⚠️  Conteneur $id nécessite sudo (root-owned)"
+      fi
+    fi
+  done
+  
+  # Si sudo est nécessaire et disponible, l'utiliser
+  if [[ "$needs_sudo" == "true" ]] && command -v sudo >/dev/null 2>&1; then
+    log "🔧 Nettoyage des conteneurs root-owned avec sudo..."
+    for id in "${container_ids[@]}"; do
+      sudo docker stop "$id" 2>/dev/null || true
+      sudo docker rm -f "$id" 2>/dev/null || true
+    done
+  elif [[ "$needs_sudo" == "true" ]]; then
+    log "❌ sudo non disponible. Les conteneurs root-owned doivent être nettoyés manuellement."
+    return 1
+  fi
 }
 
 force_cleanup() {
   log "🧹 Nettoyage des conteneurs restants (fallback)"
-  docker ps -a --filter "name=${COMPOSE_PROJECT}" --format "{{.ID}}" | xargs -r docker rm -f || true
-  docker ps -a --filter "name=${MONITOR_PROJECT}" --format "{{.ID}}" | xargs -r docker rm -f || true
-  docker ps -a --filter "name=sedi-" --format "{{.ID}}" | xargs -r docker rm -f || true
+  
+  # D'abord essayer le nettoyage normal
+  docker ps -a --filter "name=${COMPOSE_PROJECT}" --format "{{.ID}}" 2>/dev/null | while IFS= read -r id; do
+    if [[ -n "$id" ]]; then
+      docker rm -f "$id" 2>/dev/null || {
+        log "⚠️  Impossible de supprimer $id (peut-être root-owned)"
+      }
+    fi
+  done || true
+  
+  docker ps -a --filter "name=${MONITOR_PROJECT}" --format "{{.ID}}" 2>/dev/null | while IFS= read -r id; do
+    if [[ -n "$id" ]]; then
+      docker rm -f "$id" 2>/dev/null || {
+        log "⚠️  Impossible de supprimer $id (peut-être root-owned)"
+      }
+    fi
+  done || true
+  
+  docker ps -a --filter "name=sedi-" --format "{{.ID}}" 2>/dev/null | while IFS= read -r id; do
+    if [[ -n "$id" ]]; then
+      docker rm -f "$id" 2>/dev/null || {
+        log "⚠️  Impossible de supprimer $id (peut-être root-owned)"
+      }
+    fi
+  done || true
+  
+  # Ensuite essayer de nettoyer les conteneurs root-owned
+  cleanup_root_containers || true
 }
 
 log "🔍 Validation des prérequis..."
@@ -81,13 +195,20 @@ fi
 ensure_network
 
 log "🛑 Arrêt contrôlé des services applicatifs"
-compose_down "$PROD_COMPOSE" "$COMPOSE_PROJECT"
+if ! compose_down "$PROD_COMPOSE" "$COMPOSE_PROJECT"; then
+  log "⚠️  Échec de l'arrêt normal, nettoyage forcé..."
+  force_cleanup
+fi
 
 if [[ -f "$MONITOR_COMPOSE" ]]; then
   log "🛑 Arrêt contrôlé du monitoring"
-  compose_down "$MONITOR_COMPOSE" "$MONITOR_PROJECT"
+  if ! compose_down "$MONITOR_COMPOSE" "$MONITOR_PROJECT"; then
+    log "⚠️  Échec de l'arrêt normal du monitoring, nettoyage forcé..."
+    force_cleanup
+  fi
 fi
 
+# Nettoyage final pour s'assurer que tout est propre
 force_cleanup
 
 if [[ -x "$REBUILD_SCRIPT" ]]; then
