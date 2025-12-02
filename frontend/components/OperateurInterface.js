@@ -122,30 +122,52 @@ class OperateurInterface {
             this.lancementInput.addEventListener('paste', (event) => this.handleLancementPaste(event));
             
             // Empêcher l'input de capturer les événements sur la zone du bouton scanner
-            const handleInputClick = (e) => {
+            this.lancementInput.addEventListener('click', (e) => {
                 if (!this.scanBarcodeBtn) return;
                 
-                const rect = this.lancementInput.getBoundingClientRect();
                 const btnRect = this.scanBarcodeBtn.getBoundingClientRect();
-                
-                // Vérifier si le clic est dans la zone du bouton (avec marge)
                 const clickX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
                 const clickY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
                 
-                if (clickX >= btnRect.left - 5 && clickX <= btnRect.right + 5 &&
-                    clickY >= btnRect.top - 5 && clickY <= btnRect.bottom + 5) {
+                // Si le clic est dans la zone du bouton, laisser le bouton gérer
+                if (clickX >= btnRect.left && clickX <= btnRect.right &&
+                    clickY >= btnRect.top && clickY <= btnRect.bottom) {
                     e.preventDefault();
                     e.stopPropagation();
                     e.stopImmediatePropagation();
-                    console.log('🛡️ Input a bloqué un clic dans la zone du bouton - redirection vers le bouton');
                     // Déclencher le clic sur le bouton
                     this.scanBarcodeBtn.click();
                     return false;
                 }
-            };
+            });
             
-            this.lancementInput.addEventListener('click', handleInputClick, { capture: true });
-            this.lancementInput.addEventListener('touchstart', handleInputClick, { capture: true, passive: false });
+            // Même chose pour les événements tactiles
+            this.lancementInput.addEventListener('touchstart', (e) => {
+                if (!this.scanBarcodeBtn) return;
+                
+                const btnRect = this.scanBarcodeBtn.getBoundingClientRect();
+                const touch = e.touches[0];
+                if (!touch) return;
+                
+                const touchX = touch.clientX;
+                const touchY = touch.clientY;
+                
+                // Si le touch est dans la zone du bouton, laisser le bouton gérer
+                if (touchX >= btnRect.left && touchX <= btnRect.right &&
+                    touchY >= btnRect.top && touchY <= btnRect.bottom) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    // Déclencher le touch sur le bouton
+                    const touchEvent = new TouchEvent('touchstart', {
+                        bubbles: true,
+                        cancelable: true,
+                        touches: e.touches
+                    });
+                    this.scanBarcodeBtn.dispatchEvent(touchEvent);
+                    return false;
+                }
+            });
         }
         
         // Contrôles de lancement
@@ -160,49 +182,51 @@ class OperateurInterface {
         this.commentInput.addEventListener('input', () => this.handleCommentInput());
         this.addCommentBtn.addEventListener('click', () => this.handleAddComment());
         
-        // Scanner de code-barres
+        // Scanner de code-barres - Approche simple et directe
         if (this.scanBarcodeBtn) {
             // Forcer le style pour garantir la cliquabilité
             this.scanBarcodeBtn.style.pointerEvents = 'auto';
-            this.scanBarcodeBtn.style.zIndex = '200';
+            this.scanBarcodeBtn.style.zIndex = '10000'; // Plus haut que tout
             this.scanBarcodeBtn.style.position = 'absolute';
+            this.scanBarcodeBtn.style.cursor = 'pointer';
+            this.scanBarcodeBtn.style.right = '10px';
+            this.scanBarcodeBtn.style.top = '50%';
+            this.scanBarcodeBtn.style.transform = 'translateY(-50%)';
+            this.scanBarcodeBtn.style.display = 'flex';
+            this.scanBarcodeBtn.style.alignItems = 'center';
+            this.scanBarcodeBtn.style.justifyContent = 'center';
             
-            // Support pour les événements tactiles (tablettes/mobiles)
-            const handleScanClick = (e) => {
+            // S'assurer que le bouton est au-dessus de tout
+            const inputGroup = this.scanBarcodeBtn.closest('.input-group');
+            if (inputGroup) {
+                inputGroup.style.position = 'relative';
+                inputGroup.style.zIndex = '1';
+            }
+            
+            // Gestion simple du clic - une seule méthode pour éviter les conflits
+            this.scanBarcodeBtn.addEventListener('click', (e) => {
+                console.log('✅ Bouton scanner cliqué');
                 e.preventDefault();
                 e.stopPropagation();
                 e.stopImmediatePropagation();
-                console.log('✅ Bouton scanner cliqué/touché - ouverture du scanner');
                 this.openScanner();
-                return false;
-            };
+            });
             
-            // Gestion des événements avec plusieurs méthodes pour garantir la compatibilité
-            this.scanBarcodeBtn.onclick = handleScanClick;
-            this.scanBarcodeBtn.ontouchstart = handleScanClick;
-            
-            this.scanBarcodeBtn.addEventListener('click', handleScanClick, { passive: false, capture: true });
-            this.scanBarcodeBtn.addEventListener('touchstart', handleScanClick, { passive: false, capture: true });
-            this.scanBarcodeBtn.addEventListener('touchend', (e) => {
+            // Support tactile pour tablettes
+            this.scanBarcodeBtn.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-            }, { passive: false });
+            });
             
-            // Test de clic programmatique pour vérifier l'accessibilité
-            setTimeout(() => {
-                const rect = this.scanBarcodeBtn.getBoundingClientRect();
-                console.log('🔍 Bouton scanner position:', {
-                    top: rect.top,
-                    left: rect.left,
-                    width: rect.width,
-                    height: rect.height,
-                    zIndex: window.getComputedStyle(this.scanBarcodeBtn).zIndex,
-                    pointerEvents: window.getComputedStyle(this.scanBarcodeBtn).pointerEvents
-                });
-            }, 1000);
+            this.scanBarcodeBtn.addEventListener('touchend', (e) => {
+                console.log('✅ Bouton scanner touché');
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                this.openScanner();
+            });
             
-            // Debug: vérifier que le bouton est bien accessible
-            console.log('✅ Bouton scanner initialisé:', this.scanBarcodeBtn);
+            console.log('✅ Bouton scanner initialisé');
         } else {
             console.error('❌ Bouton scanner introuvable!');
         }
@@ -1158,8 +1182,10 @@ class OperateurInterface {
         }
         
         // Vérifier si on est en HTTPS (requis pour getUserMedia sauf localhost)
+        // Note: on laisse passer pour permettre le test, le navigateur bloquera si nécessaire
         if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-            throw new Error('L\'accès à la caméra nécessite une connexion HTTPS. Veuillez utiliser https:// ou contacter l\'administrateur.');
+            console.warn('⚠️ Connexion non-HTTPS détectée. L\'accès à la caméra peut être bloqué par le navigateur.');
+            // On continue quand même, le navigateur gérera la sécurité
         }
         
         // Demander les permissions et vérifier les caméras disponibles
