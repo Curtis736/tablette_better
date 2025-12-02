@@ -28,13 +28,33 @@ class ScannerManager {
      * Vérifie si ZXing est chargé
      * @returns {Promise<boolean>}
      */
-    async waitForZXing(maxAttempts = 10) {
+    async waitForZXing(maxAttempts = 30) {
+        console.log('⏳ Attente du chargement de ZXing...');
+        
         for (let i = 0; i < maxAttempts; i++) {
-            if (typeof ZXing !== 'undefined' && ZXing.BrowserMultiFormatReader) {
+            // Vérifier différentes façons dont ZXing peut être exposé
+            const zxingAvailable = 
+                (typeof ZXing !== 'undefined' && ZXing.BrowserMultiFormatReader) ||
+                (typeof window !== 'undefined' && window.ZXing && window.ZXing.BrowserMultiFormatReader);
+            
+            if (zxingAvailable) {
+                console.log(`✅ ZXing chargé après ${i + 1} tentatives`);
                 return true;
             }
+            
+            // Log toutes les 5 tentatives
+            if (i % 5 === 0 && i > 0) {
+                console.log(`⏳ ZXing en cours de chargement... (tentative ${i}/${maxAttempts})`);
+                console.log('   - typeof ZXing:', typeof ZXing);
+                console.log('   - typeof window.ZXing:', typeof window !== 'undefined' ? typeof window.ZXing : 'window undefined');
+            }
+            
             await new Promise(resolve => setTimeout(resolve, 200));
         }
+        
+        console.error('❌ ZXing non chargé après', maxAttempts, 'tentatives');
+        console.error('   - typeof ZXing:', typeof ZXing);
+        console.error('   - typeof window.ZXing:', typeof window !== 'undefined' ? typeof window.ZXing : 'window undefined');
         return false;
     }
 
