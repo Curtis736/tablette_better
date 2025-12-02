@@ -136,7 +136,17 @@ class OperateurInterface {
         
         // Scanner de code-barres
         if (this.scanBarcodeBtn) {
-            this.scanBarcodeBtn.addEventListener('click', () => this.openScanner());
+            // Support pour les événements tactiles (tablettes/mobiles)
+            this.scanBarcodeBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.openScanner();
+            });
+            this.scanBarcodeBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.openScanner();
+            });
         }
         if (this.closeScannerBtn) {
             this.closeScannerBtn.addEventListener('click', () => this.closeScanner());
