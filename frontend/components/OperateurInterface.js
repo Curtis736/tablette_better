@@ -1,6 +1,6 @@
 // Interface simplifiée pour les opérateurs
 import TimeUtils from '../utils/TimeUtils.js';
-import ScannerManager from '../utils/ScannerManager.js';
+import ScannerManager from '../utils/ScannerManager.js?v=20251021-scanner-fix';
 
 class OperateurInterface {
     constructor(operator, app) {

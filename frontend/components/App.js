@@ -1,7 +1,7 @@
 // Classe principale de l'application
-import OperateurInterface from './OperateurInterface.js?v=20251021-cache-fixed';
-import AdminPage from './AdminPage.js?v=20251021-cache-fixed';
-import ApiService from '../services/ApiService.js?v=20251021-cache-fixed';
+import OperateurInterface from './OperateurInterface.js?v=20251021-scanner-fix';
+import AdminPage from './AdminPage.js?v=20251021-scanner-fix';
+import ApiService from '../services/ApiService.js?v=20251021-scanner-fix';
 import StorageService from '../services/StorageService.js?v=20251007-final';
 import notificationManager from '../utils/NotificationManager.js';
 
