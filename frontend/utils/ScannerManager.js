@@ -36,26 +36,56 @@ class ScannerManager {
         }
         
         // Vérifier si le script est déjà en cours de chargement
-        if (document.querySelector('script[src*="zxing"]')) {
+        const existingScript = document.querySelector('script[src*="zxing"]');
+        if (existingScript) {
             console.log('⏳ Script ZXing déjà présent, attente du chargement...');
             return await this.waitForZXing(30);
         }
         
-        // Charger ZXing dynamiquement
+        // Essayer plusieurs CDNs et versions
+        const zxingSources = [
+            'https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0',
+            'https://unpkg.com/@zxing/library@0.20.0',
+            'https://cdn.jsdelivr.net/npm/@zxing/library@latest'
+        ];
+        
         console.log('📦 Chargement dynamique de ZXing...');
+        
+        for (const src of zxingSources) {
+            try {
+                const loaded = await this.loadScript(src);
+                if (loaded) {
+                    return true;
+                }
+            } catch (error) {
+                console.warn(`⚠️ Échec chargement depuis ${src}:`, error);
+                continue;
+            }
+        }
+        
+        console.error('❌ Impossible de charger ZXing depuis tous les CDNs');
+        return false;
+    }
+    
+    /**
+     * Charge un script dynamiquement
+     * @param {string} src - URL du script
+     * @returns {Promise<boolean>}
+     */
+    loadScript(src) {
         return new Promise((resolve) => {
             const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@latest';
+            script.src = src;
             script.onload = () => {
-                console.log('✅ Script ZXing chargé, vérification...');
+                console.log(`✅ Script chargé depuis ${src}, vérification...`);
                 // Attendre un peu que ZXing soit initialisé
                 setTimeout(async () => {
-                    const loaded = await this.waitForZXing(10);
+                    const loaded = await this.waitForZXing(15);
                     resolve(loaded);
-                }, 500);
+                }, 1000);
             };
-            script.onerror = () => {
-                console.error('❌ Erreur lors du chargement du script ZXing');
+            script.onerror = (error) => {
+                console.error(`❌ Erreur lors du chargement depuis ${src}:`, error);
                 resolve(false);
             };
             document.head.appendChild(script);
