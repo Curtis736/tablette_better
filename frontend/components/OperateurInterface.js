@@ -122,16 +122,30 @@ class OperateurInterface {
             this.lancementInput.addEventListener('paste', (event) => this.handleLancementPaste(event));
             
             // Empêcher l'input de capturer les événements sur la zone du bouton scanner
-            this.lancementInput.addEventListener('click', (e) => {
-                const rect = this.lancementInput.getBoundingClientRect();
-                const btnRect = this.scanBarcodeBtn ? this.scanBarcodeBtn.getBoundingClientRect() : null;
+            const handleInputClick = (e) => {
+                if (!this.scanBarcodeBtn) return;
                 
-                if (btnRect && e.clientX >= btnRect.left && e.clientX <= btnRect.right &&
-                    e.clientY >= btnRect.top && e.clientY <= btnRect.bottom) {
+                const rect = this.lancementInput.getBoundingClientRect();
+                const btnRect = this.scanBarcodeBtn.getBoundingClientRect();
+                
+                // Vérifier si le clic est dans la zone du bouton (avec marge)
+                const clickX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+                const clickY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+                
+                if (clickX >= btnRect.left - 5 && clickX <= btnRect.right + 5 &&
+                    clickY >= btnRect.top - 5 && clickY <= btnRect.bottom + 5) {
+                    e.preventDefault();
                     e.stopPropagation();
-                    // Laisser le bouton gérer le clic
+                    e.stopImmediatePropagation();
+                    console.log('🛡️ Input a bloqué un clic dans la zone du bouton - redirection vers le bouton');
+                    // Déclencher le clic sur le bouton
+                    this.scanBarcodeBtn.click();
+                    return false;
                 }
-            });
+            };
+            
+            this.lancementInput.addEventListener('click', handleInputClick, { capture: true });
+            this.lancementInput.addEventListener('touchstart', handleInputClick, { capture: true, passive: false });
         }
         
         // Contrôles de lancement
@@ -148,14 +162,24 @@ class OperateurInterface {
         
         // Scanner de code-barres
         if (this.scanBarcodeBtn) {
+            // Forcer le style pour garantir la cliquabilité
+            this.scanBarcodeBtn.style.pointerEvents = 'auto';
+            this.scanBarcodeBtn.style.zIndex = '200';
+            this.scanBarcodeBtn.style.position = 'absolute';
+            
             // Support pour les événements tactiles (tablettes/mobiles)
             const handleScanClick = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 e.stopImmediatePropagation();
-                console.log('Bouton scanner cliqué/touché');
+                console.log('✅ Bouton scanner cliqué/touché - ouverture du scanner');
                 this.openScanner();
+                return false;
             };
+            
+            // Gestion des événements avec plusieurs méthodes pour garantir la compatibilité
+            this.scanBarcodeBtn.onclick = handleScanClick;
+            this.scanBarcodeBtn.ontouchstart = handleScanClick;
             
             this.scanBarcodeBtn.addEventListener('click', handleScanClick, { passive: false, capture: true });
             this.scanBarcodeBtn.addEventListener('touchstart', handleScanClick, { passive: false, capture: true });
@@ -164,10 +188,23 @@ class OperateurInterface {
                 e.stopPropagation();
             }, { passive: false });
             
+            // Test de clic programmatique pour vérifier l'accessibilité
+            setTimeout(() => {
+                const rect = this.scanBarcodeBtn.getBoundingClientRect();
+                console.log('🔍 Bouton scanner position:', {
+                    top: rect.top,
+                    left: rect.left,
+                    width: rect.width,
+                    height: rect.height,
+                    zIndex: window.getComputedStyle(this.scanBarcodeBtn).zIndex,
+                    pointerEvents: window.getComputedStyle(this.scanBarcodeBtn).pointerEvents
+                });
+            }, 1000);
+            
             // Debug: vérifier que le bouton est bien accessible
-            console.log('Bouton scanner initialisé:', this.scanBarcodeBtn);
+            console.log('✅ Bouton scanner initialisé:', this.scanBarcodeBtn);
         } else {
-            console.error('Bouton scanner introuvable!');
+            console.error('❌ Bouton scanner introuvable!');
         }
         if (this.closeScannerBtn) {
             this.closeScannerBtn.addEventListener('click', () => this.closeScanner());

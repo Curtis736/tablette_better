@@ -237,6 +237,19 @@ body {
     transition: all 0.3s ease;
     pointer-events: auto;
     z-index: 1;
+    position: relative;
+}
+
+/* Zone de protection pour le bouton scanner - empêche l'input de capturer les clics */
+.input-group::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 80px;
+    z-index: 50;
+    pointer-events: none;
 }
 
 .input-group input:focus {
@@ -1624,19 +1637,20 @@ tr:hover {
     padding: 12px 18px;
     cursor: pointer;
     font-size: 18px;
-    z-index: 100;
+    z-index: 200;
     transition: all 0.3s ease;
     box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
     display: flex;
     align-items: center;
     justify-content: center;
     touch-action: manipulation;
-    pointer-events: auto;
+    pointer-events: auto !important;
     -webkit-tap-highlight-color: rgba(102, 126, 234, 0.3);
     user-select: none;
     min-width: 48px;
     min-height: 48px;
     isolation: isolate;
+    will-change: transform;
 }
 
 .btn-scan:hover {
@@ -1829,7 +1843,13 @@ tr:hover {
         min-width: 56px;
         min-height: 56px;
         font-size: 20px;
-        z-index: 15;
+        z-index: 200 !important;
+        right: 5px !important;
+    }
+    
+    .input-group input {
+        padding-right: 85px;
+        pointer-events: auto;
     }
 }
 
@@ -1839,7 +1859,12 @@ tr:hover {
         padding: 14px 20px;
         min-width: 56px;
         min-height: 56px;
-        z-index: 15;
+        z-index: 200 !important;
+        right: 5px !important;
+    }
+    
+    .input-group input {
+        padding-right: 85px;
     }
     
     .btn-scan:active {
