@@ -315,7 +315,7 @@ class ScannerManager {
         const isSupported = hasModernAPI || hasLegacyAPI;
         
         if (!isSupported) {
-            console.warn('❌ Aucune API caméra disponible');
+            console.warn('⚠️ Aucune API caméra détectée directement');
             console.warn('   Détails:', {
                 mediaDevices: !!navigator.mediaDevices,
                 getUserMedia: !!navigator.getUserMedia,
@@ -323,7 +323,12 @@ class ScannerManager {
                 moz: !!navigator.mozGetUserMedia,
                 ms: !!navigator.msGetUserMedia
             });
-            return false;
+            
+            // Même si aucune API n'est détectée, on autorise quand même l'essai
+            // Le navigateur peut avoir des APIs non standard ou le contexte peut changer
+            // On laissera le navigateur gérer l'erreur si vraiment rien n'est disponible
+            console.log('⚠️ Autorisation de l\'essai malgré l\'absence de détection - le navigateur gérera l\'erreur si nécessaire');
+            return true;
         }
         
         // Toujours retourner true si une API est disponible
