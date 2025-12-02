@@ -1039,7 +1039,21 @@ class OperateurInterface {
 
         try {
             await this.scannerManager.start(this.scannerVideo, this.scannerCanvas);
-            this.scannerStatus.innerHTML = '<i class="fas fa-check-circle" style="color: green;"></i> <span style="color: green;">Caméra active - Scannez un code-barres</span>';
+            
+            // Vérifier si ZXing est disponible pour le scan automatique
+            const hasZXing = typeof ZXing !== 'undefined' && ZXing.BrowserMultiFormatReader;
+            
+            if (hasZXing) {
+                this.scannerStatus.innerHTML = '<i class="fas fa-check-circle" style="color: green;"></i> <span style="color: green;">Caméra active - Scannez un code-barres</span>';
+            } else {
+                this.scannerStatus.innerHTML = `
+                    <div style="text-align: center; padding: 1rem;">
+                        <i class="fas fa-camera" style="font-size: 2rem; color: #667eea; margin-bottom: 0.5rem; display: block;"></i>
+                        <p style="color: #667eea; font-weight: 500; margin: 0.5rem 0;">Caméra active</p>
+                        <p style="color: #666; font-size: 0.9rem; margin: 0;">Positionnez le code-barres devant la caméra et saisissez-le manuellement dans le champ ci-dessous</p>
+                    </div>
+                `;
+            }
         } catch (error) {
             console.error('Erreur lors de l\'ouverture du scanner:', error);
             this.scannerStatus.innerHTML = `

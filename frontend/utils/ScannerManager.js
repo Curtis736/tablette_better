@@ -272,17 +272,11 @@ class ScannerManager {
         
         // Fallback : méthode simple sans bibliothèque externe
         // On affiche juste la caméra et on laisse l'utilisateur saisir manuellement
-        // ou on peut utiliser une bibliothèque plus simple
-        console.log('⚠️ ZXing non disponible, caméra affichée mais scan automatique désactivé');
-        console.log('💡 Solution: Utilisez la caméra pour voir le code-barres et saisissez-le manuellement');
+        console.log('⚠️ ZXing non disponible - scan automatique désactivé');
+        console.log('💡 La caméra est affichée pour que vous puissiez voir le code-barres et le saisir manuellement');
         
-        // Afficher un message à l'utilisateur
-        if (this.onError) {
-            this.onError('Scan automatique non disponible. Utilisez la caméra pour voir le code-barres et saisissez-le manuellement dans le champ.', null);
-        }
-        
-        // On peut quand même afficher la caméra pour que l'utilisateur voie le code
-        // Mais on n'essaie pas de scanner automatiquement
+        // La caméra est déjà affichée, pas besoin de faire autre chose
+        // L'utilisateur peut voir le code-barres et le saisir dans le champ
     }
 
     /**
