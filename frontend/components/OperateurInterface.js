@@ -1023,8 +1023,13 @@ class OperateurInterface {
         }
 
         // Vérifier si le scanner est supporté
-        if (!ScannerManager.isSupported()) {
-            this.notificationManager.error('Le scanner n\'est pas supporté par ce navigateur. Veuillez utiliser HTTPS ou un navigateur moderne.');
+        const isSupported = ScannerManager.isSupported();
+        console.log('📱 Support scanner:', isSupported);
+        
+        if (!isSupported) {
+            const errorMsg = 'Le scanner n\'est pas supporté par ce navigateur. Vérifiez que vous utilisez un navigateur moderne (Chrome, Firefox, Safari, Edge) et que l\'API MediaDevices est disponible.';
+            console.error('❌', errorMsg);
+            this.notificationManager.error(errorMsg);
             return;
         }
 
