@@ -1173,73 +1173,20 @@ class OperateurInterface {
     }
     
     async startBarcodeScanner() {
-        // Vérifier si l'API MediaDevices est disponible (avec fallback pour anciens navigateurs)
-        const hasMediaDevices = navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
-        const hasLegacyGetUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
-        
-        if (!hasMediaDevices && !hasLegacyGetUserMedia) {
-            throw new Error('L\'accès à la caméra n\'est pas supporté par ce navigateur. Veuillez utiliser un navigateur moderne (Chrome, Firefox, Safari, Edge).');
-        }
-        
         // Vérifier si on est en HTTPS (requis pour getUserMedia sauf localhost)
-        // Note: on laisse passer pour permettre le test, le navigateur bloquera si nécessaire
-        if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-            console.warn('⚠️ Connexion non-HTTPS détectée. L\'accès à la caméra peut être bloqué par le navigateur.');
-            // On continue quand même, le navigateur gérera la sécurité
+        const isSecureContext = location.protocol === 'https:' || 
+                                location.hostname === 'localhost' || 
+                                location.hostname === '127.0.0.1' ||
+                                location.hostname === '0.0.0.0' ||
+                                location.hostname.includes('localhost');
+        
+        if (!isSecureContext) {
+            throw new Error('L\'accès à la caméra nécessite une connexion HTTPS (sauf en localhost). Veuillez utiliser HTTPS ou tester en localhost.');
         }
         
-        // Demander les permissions et vérifier les caméras disponibles
-        try {
-            // Utiliser l'API moderne si disponible, sinon fallback
-            let getUserMediaFunc;
-            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                getUserMediaFunc = (constraints) => navigator.mediaDevices.getUserMedia(constraints);
-            } else if (navigator.getUserMedia) {
-                getUserMediaFunc = (constraints) => new Promise((resolve, reject) => {
-                    navigator.getUserMedia(constraints, resolve, reject);
-                });
-            } else if (navigator.webkitGetUserMedia) {
-                getUserMediaFunc = (constraints) => new Promise((resolve, reject) => {
-                    navigator.webkitGetUserMedia(constraints, resolve, reject);
-                });
-            } else {
-                throw new Error('API de caméra non disponible');
-            }
-            
-            // Demander l'accès à la caméra pour obtenir les permissions
-            const stream = await getUserMediaFunc({ video: true });
-            // Libérer immédiatement le stream, on va le récupérer via Quagga
-            if (stream && stream.getTracks) {
-                stream.getTracks().forEach(track => track.stop());
-            }
-            
-            // Maintenant on peut énumérer les devices (si l'API est disponible)
-            if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-                try {
-                    const devices = await navigator.mediaDevices.enumerateDevices();
-                    const videoDevices = devices.filter(device => device.kind === 'videoinput');
-                    
-                    if (videoDevices.length === 0) {
-                        console.warn('Aucune caméra détectée via enumerateDevices');
-                    } else {
-                        console.log(`${videoDevices.length} caméra(s) disponible(s)`);
-                    }
-                } catch (enumError) {
-                    console.warn('Impossible d\'énumérer les devices:', enumError);
-                }
-            }
-        } catch (error) {
-            // Si c'est une erreur de permission, on la gère plus tard
-            if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                throw new Error('Permission d\'accès à la caméra refusée. Veuillez autoriser l\'accès à la caméra dans les paramètres de votre navigateur.');
-            } else if (error.name === 'NotFoundError') {
-                throw new Error('Aucune caméra détectée sur cet appareil');
-            } else if (error.name === 'NotReadableError') {
-                throw new Error('La caméra est déjà utilisée par une autre application');
-            }
-            // Pour les autres erreurs, on continue quand même
-            console.warn('Impossible de vérifier les caméras:', error);
-        }
+        // Ne pas vérifier l'API caméra de manière stricte - laisser QuaggaJS gérer
+        // QuaggaJS gère lui-même les fallbacks pour les différentes APIs (MediaDevices, getUserMedia, etc.)
+        // Cela évite les faux négatifs et les problèmes de compatibilité
         
         // Essayer différentes configurations de caméra
         const cameraConfigs = [
@@ -1247,6 +1194,8 @@ class OperateurInterface {
             { facingMode: "user" },         // Caméra avant
             {}                              // Aucune préférence (première caméra disponible)
         ];
+        
+        let lastError = null;
         
         for (let i = 0; i < cameraConfigs.length; i++) {
             try {
@@ -1257,19 +1206,28 @@ class OperateurInterface {
                 return result;
             } catch (error) {
                 console.warn(`Tentative ${i + 1} échouée:`, error);
+                lastError = error;
                 
                 // Si c'est la dernière tentative, rejeter avec un message clair
                 if (i === cameraConfigs.length - 1) {
                     let errorMessage = 'Impossible d\'accéder à la caméra. ';
                     
-                    if (error.name === 'NotFoundError' || error.name === 'NotReadableError') {
+                    // Analyser le message d'erreur de Quagga
+                    const errorStr = error.toString().toLowerCase();
+                    const errorName = error.name || '';
+                    
+                    if (errorName === 'NotFoundError' || errorStr.includes('no camera') || errorStr.includes('aucune caméra')) {
                         errorMessage += 'Aucune caméra disponible ou caméra déjà utilisée par une autre application.';
-                    } else if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                    } else if (errorName === 'NotAllowedError' || errorName === 'PermissionDeniedError' || errorStr.includes('permission') || errorStr.includes('refus')) {
                         errorMessage += 'Permission d\'accès à la caméra refusée. Veuillez autoriser l\'accès à la caméra dans les paramètres de votre navigateur.';
-                    } else if (error.name === 'OverconstrainedError') {
+                    } else if (errorName === 'NotReadableError' || errorStr.includes('déjà utilisée') || errorStr.includes('already in use')) {
+                        errorMessage += 'La caméra est déjà utilisée par une autre application. Veuillez fermer les autres applications utilisant la caméra.';
+                    } else if (errorName === 'OverconstrainedError' || errorStr.includes('not supported')) {
                         errorMessage += 'Les paramètres de la caméra ne sont pas supportés par cet appareil.';
+                    } else if (errorStr.includes('not supported') || errorStr.includes('n\'est pas supporté')) {
+                        errorMessage += 'L\'accès à la caméra n\'est pas supporté par ce navigateur. Veuillez utiliser un navigateur moderne (Chrome, Firefox, Safari, Edge).';
                     } else {
-                        errorMessage += error.message || 'Erreur inconnue.';
+                        errorMessage += error.message || error.toString() || 'Erreur inconnue.';
                     }
                     
                     throw new Error(errorMessage);
@@ -1281,61 +1239,79 @@ class OperateurInterface {
     async tryInitQuagga(constraints) {
         return new Promise((resolve, reject) => {
             // Configuration QuaggaJS pour les code-barres EAN, CODE128, etc.
-            Quagga.init({
-                inputStream: {
-                    name: "Live",
-                    type: "LiveStream",
-                    target: this.scannerViewport,
-                    constraints: {
-                        width: { min: 320, ideal: 640, max: 1280 },
-                        height: { min: 240, ideal: 480, max: 720 },
-                        ...constraints
+            try {
+                Quagga.init({
+                    inputStream: {
+                        name: "Live",
+                        type: "LiveStream",
+                        target: this.scannerViewport,
+                        constraints: {
+                            width: { min: 320, ideal: 640, max: 1280 },
+                            height: { min: 240, ideal: 480, max: 720 },
+                            ...constraints
+                        }
+                    },
+                    locator: {
+                        patchSize: "medium",
+                        halfSample: true
+                    },
+                    numOfWorkers: 2,
+                    decoder: {
+                        readers: [
+                            "code_128_reader",
+                            "ean_reader",
+                            "ean_8_reader",
+                            "code_39_reader",
+                            "code_39_vin_reader",
+                            "codabar_reader",
+                            "upc_reader",
+                            "upc_e_reader",
+                            "i2of5_reader"
+                        ]
+                    },
+                    locate: true
+                }, (err) => {
+                    if (err) {
+                        console.error('Erreur initialisation Quagga:', err);
+                        // Convertir l'erreur Quagga en erreur standardisée
+                        let error = err;
+                        if (typeof err === 'string') {
+                            error = new Error(err);
+                        } else if (err && err.message) {
+                            error = new Error(err.message);
+                            error.name = err.name || 'QuaggaError';
+                        } else if (err && err.toString) {
+                            error = new Error(err.toString());
+                        } else {
+                            error = new Error('Erreur lors de l\'initialisation du scanner');
+                        }
+                        reject(error);
+                        return;
                     }
-                },
-                locator: {
-                    patchSize: "medium",
-                    halfSample: true
-                },
-                numOfWorkers: 2,
-                decoder: {
-                    readers: [
-                        "code_128_reader",
-                        "ean_reader",
-                        "ean_8_reader",
-                        "code_39_reader",
-                        "code_39_vin_reader",
-                        "codabar_reader",
-                        "upc_reader",
-                        "upc_e_reader",
-                        "i2of5_reader"
-                    ]
-                },
-                locate: true
-            }, (err) => {
-                if (err) {
-                    console.error('Erreur initialisation Quagga:', err);
-                    reject(err);
-                    return;
-                }
-                
-                console.log('Scanner initialisé avec succès');
-                Quagga.start();
-                this.scannerActive = true;
-                this.scannerInstance = Quagga;
-                
-                this.scannerStatus.innerHTML = '<i class="fas fa-check-circle" style="color: green;"></i> <span style="color: green;">Caméra active - Scannez un code-barres</span>';
-                
-                // Écouter les résultats de scan
-                Quagga.onDetected((result) => {
-                    if (result && result.codeResult && result.codeResult.code) {
-                        const scannedCode = result.codeResult.code.trim();
-                        console.log('Code scanné:', scannedCode);
-                        this.handleScannedCode(scannedCode);
-                    }
+                    
+                    console.log('Scanner initialisé avec succès');
+                    Quagga.start();
+                    this.scannerActive = true;
+                    this.scannerInstance = Quagga;
+                    
+                    this.scannerStatus.innerHTML = '<i class="fas fa-check-circle" style="color: green;"></i> <span style="color: green;">Caméra active - Scannez un code-barres</span>';
+                    
+                    // Écouter les résultats de scan
+                    Quagga.onDetected((result) => {
+                        if (result && result.codeResult && result.codeResult.code) {
+                            const scannedCode = result.codeResult.code.trim();
+                            console.log('Code scanné:', scannedCode);
+                            this.handleScannedCode(scannedCode);
+                        }
+                    });
+                    
+                    resolve();
                 });
-                
-                resolve();
-            });
+            } catch (error) {
+                // Capturer les erreurs synchrones lors de l'appel à Quagga.init
+                console.error('Erreur lors de l\'appel à Quagga.init:', error);
+                reject(error);
+            }
         });
     }
     
