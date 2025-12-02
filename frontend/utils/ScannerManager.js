@@ -25,12 +25,48 @@ class ScannerManager {
     }
 
     /**
+     * Charge ZXing dynamiquement si ce n'est pas déjà fait
+     * @returns {Promise<boolean>}
+     */
+    async loadZXing() {
+        // Vérifier si ZXing est déjà chargé
+        if (typeof ZXing !== 'undefined' && ZXing.BrowserMultiFormatReader) {
+            console.log('✅ ZXing déjà chargé');
+            return true;
+        }
+        
+        // Vérifier si le script est déjà en cours de chargement
+        if (document.querySelector('script[src*="zxing"]')) {
+            console.log('⏳ Script ZXing déjà présent, attente du chargement...');
+            return await this.waitForZXing(30);
+        }
+        
+        // Charger ZXing dynamiquement
+        console.log('📦 Chargement dynamique de ZXing...');
+        return new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@latest';
+            script.onload = () => {
+                console.log('✅ Script ZXing chargé, vérification...');
+                // Attendre un peu que ZXing soit initialisé
+                setTimeout(async () => {
+                    const loaded = await this.waitForZXing(10);
+                    resolve(loaded);
+                }, 500);
+            };
+            script.onerror = () => {
+                console.error('❌ Erreur lors du chargement du script ZXing');
+                resolve(false);
+            };
+            document.head.appendChild(script);
+        });
+    }
+
+    /**
      * Vérifie si ZXing est chargé
      * @returns {Promise<boolean>}
      */
     async waitForZXing(maxAttempts = 30) {
-        console.log('⏳ Attente du chargement de ZXing...');
-        
         for (let i = 0; i < maxAttempts; i++) {
             // Vérifier différentes façons dont ZXing peut être exposé
             const zxingAvailable = 
@@ -38,23 +74,14 @@ class ScannerManager {
                 (typeof window !== 'undefined' && window.ZXing && window.ZXing.BrowserMultiFormatReader);
             
             if (zxingAvailable) {
-                console.log(`✅ ZXing chargé après ${i + 1} tentatives`);
+                console.log(`✅ ZXing disponible après ${i + 1} tentatives`);
                 return true;
-            }
-            
-            // Log toutes les 5 tentatives
-            if (i % 5 === 0 && i > 0) {
-                console.log(`⏳ ZXing en cours de chargement... (tentative ${i}/${maxAttempts})`);
-                console.log('   - typeof ZXing:', typeof ZXing);
-                console.log('   - typeof window.ZXing:', typeof window !== 'undefined' ? typeof window.ZXing : 'window undefined');
             }
             
             await new Promise(resolve => setTimeout(resolve, 200));
         }
         
-        console.error('❌ ZXing non chargé après', maxAttempts, 'tentatives');
-        console.error('   - typeof ZXing:', typeof ZXing);
-        console.error('   - typeof window.ZXing:', typeof window !== 'undefined' ? typeof window.ZXing : 'window undefined');
+        console.error('❌ ZXing non disponible après', maxAttempts, 'tentatives');
         return false;
     }
 
@@ -75,10 +102,10 @@ class ScannerManager {
         this.ctx = canvasElement.getContext('2d');
 
         try {
-            // Attendre que ZXing soit chargé
-            const zxingLoaded = await this.waitForZXing();
+            // Charger ZXing si nécessaire
+            const zxingLoaded = await this.loadZXing();
             if (!zxingLoaded) {
-                throw new Error('ZXing-js n\'est pas chargé. Vérifiez votre connexion internet et rechargez la page.');
+                throw new Error('Impossible de charger ZXing-js. Vérifiez votre connexion internet et réessayez.');
             }
 
             // Détecter quelle API utiliser
