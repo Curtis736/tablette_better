@@ -1,5 +1,6 @@
 // Interface simplifiée pour les opérateurs
 import TimeUtils from '../utils/TimeUtils.js';
+import ScannerManager from '../utils/ScannerManager.js';
 
 class OperateurInterface {
     constructor(operator, app) {
@@ -68,14 +69,16 @@ class OperateurInterface {
         this.scanBarcodeBtn = document.getElementById('scanBarcodeBtn');
         this.scannerModal = document.getElementById('barcodeScannerModal');
         this.closeScannerBtn = document.getElementById('closeScannerBtn');
-        this.scannerContainer = document.getElementById('scannerContainer');
-        this.scannerViewport = document.getElementById('scannerViewport');
+        this.scannerVideo = document.getElementById('scannerVideo');
+        this.scannerCanvas = document.getElementById('scannerCanvas');
         this.scannerStatus = document.getElementById('scannerStatus');
         
-        // État du scanner
-        this.scannerActive = false;
-        this.scannerInstance = null;
-        this.isProcessingScan = false; // Flag pour éviter les scans multiples
+        // Initialiser le gestionnaire de scanner
+        this.scannerManager = new ScannerManager();
+        this.scannerManager.init(
+            (code) => this.handleScannedCode(code),
+            (error, originalError) => this.handleScannerError(error, originalError)
+        );
         
         // Debug des éléments historique
         console.log('refreshHistoryBtn trouvé:', !!this.refreshHistoryBtn);
@@ -120,54 +123,6 @@ class OperateurInterface {
             // Forcer le clavier numérique et interdire les caractères non numériques
             this.lancementInput.addEventListener('keydown', (event) => this.handleLancementKeydown(event));
             this.lancementInput.addEventListener('paste', (event) => this.handleLancementPaste(event));
-            
-            // Empêcher l'input de capturer les événements sur la zone du bouton scanner
-            this.lancementInput.addEventListener('click', (e) => {
-                if (!this.scanBarcodeBtn) return;
-                
-                const btnRect = this.scanBarcodeBtn.getBoundingClientRect();
-                const clickX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
-                const clickY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
-                
-                // Si le clic est dans la zone du bouton, laisser le bouton gérer
-                if (clickX >= btnRect.left && clickX <= btnRect.right &&
-                    clickY >= btnRect.top && clickY <= btnRect.bottom) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                    // Déclencher le clic sur le bouton
-                    this.scanBarcodeBtn.click();
-                    return false;
-                }
-            });
-            
-            // Même chose pour les événements tactiles
-            this.lancementInput.addEventListener('touchstart', (e) => {
-                if (!this.scanBarcodeBtn) return;
-                
-                const btnRect = this.scanBarcodeBtn.getBoundingClientRect();
-                const touch = e.touches[0];
-                if (!touch) return;
-                
-                const touchX = touch.clientX;
-                const touchY = touch.clientY;
-                
-                // Si le touch est dans la zone du bouton, laisser le bouton gérer
-                if (touchX >= btnRect.left && touchX <= btnRect.right &&
-                    touchY >= btnRect.top && touchY <= btnRect.bottom) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                    // Déclencher le touch sur le bouton
-                    const touchEvent = new TouchEvent('touchstart', {
-                        bubbles: true,
-                        cancelable: true,
-                        touches: e.touches
-                    });
-                    this.scanBarcodeBtn.dispatchEvent(touchEvent);
-                    return false;
-                }
-            });
         }
         
         // Contrôles de lancement
@@ -182,62 +137,29 @@ class OperateurInterface {
         this.commentInput.addEventListener('input', () => this.handleCommentInput());
         this.addCommentBtn.addEventListener('click', () => this.handleAddComment());
         
-        // Scanner de code-barres - Approche simple et directe
+        // Gestion du scanner
         if (this.scanBarcodeBtn) {
-            // Forcer le style pour garantir la cliquabilité
-            this.scanBarcodeBtn.style.pointerEvents = 'auto';
-            this.scanBarcodeBtn.style.zIndex = '10000'; // Plus haut que tout
-            this.scanBarcodeBtn.style.position = 'absolute';
-            this.scanBarcodeBtn.style.cursor = 'pointer';
-            this.scanBarcodeBtn.style.right = '10px';
-            this.scanBarcodeBtn.style.top = '50%';
-            this.scanBarcodeBtn.style.transform = 'translateY(-50%)';
-            this.scanBarcodeBtn.style.display = 'flex';
-            this.scanBarcodeBtn.style.alignItems = 'center';
-            this.scanBarcodeBtn.style.justifyContent = 'center';
-            
-            // S'assurer que le bouton est au-dessus de tout
-            const inputGroup = this.scanBarcodeBtn.closest('.input-group');
-            if (inputGroup) {
-                inputGroup.style.position = 'relative';
-                inputGroup.style.zIndex = '1';
-            }
-            
-            // Gestion simple du clic - une seule méthode pour éviter les conflits
-            this.scanBarcodeBtn.addEventListener('click', (e) => {
-                console.log('✅ Bouton scanner cliqué');
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                this.openScanner();
-            });
-            
-            // Support tactile pour tablettes
-            this.scanBarcodeBtn.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-            });
-            
+            this.scanBarcodeBtn.addEventListener('click', () => this.openScanner());
             this.scanBarcodeBtn.addEventListener('touchend', (e) => {
-                console.log('✅ Bouton scanner touché');
                 e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
                 this.openScanner();
             });
-            
-            console.log('✅ Bouton scanner initialisé');
-        } else {
-            console.error('❌ Bouton scanner introuvable!');
         }
+        
         if (this.closeScannerBtn) {
             this.closeScannerBtn.addEventListener('click', () => this.closeScanner());
         }
         
-        // Fermer le scanner en cliquant en dehors
+        // Fermer le scanner en cliquant en dehors ou avec Escape
         if (this.scannerModal) {
             this.scannerModal.addEventListener('click', (e) => {
                 if (e.target === this.scannerModal) {
+                    this.closeScanner();
+                }
+            });
+            
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && this.scannerModal.style.display === 'flex') {
                     this.closeScanner();
                 }
             });
@@ -1089,6 +1011,116 @@ class OperateurInterface {
         await this.loadComments();
     }
 
+    // ===== SCANNER DE CODE-BARRES =====
+    
+    /**
+     * Ouvre le modal scanner et démarre la caméra
+     */
+    async openScanner() {
+        if (!this.scannerModal || !this.scannerVideo || !this.scannerCanvas) {
+            this.notificationManager.error('Éléments du scanner non trouvés');
+            return;
+        }
+
+        // Vérifier si le scanner est supporté
+        if (!ScannerManager.isSupported()) {
+            this.notificationManager.error('Le scanner n\'est pas supporté par ce navigateur. Veuillez utiliser HTTPS ou un navigateur moderne.');
+            return;
+        }
+
+        // Afficher le modal
+        this.scannerModal.style.display = 'flex';
+        this.scannerStatus.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> <span>Initialisation de la caméra...</span>';
+
+        try {
+            await this.scannerManager.start(this.scannerVideo, this.scannerCanvas);
+            this.scannerStatus.innerHTML = '<i class="fas fa-check-circle" style="color: green;"></i> <span style="color: green;">Caméra active - Scannez un code-barres</span>';
+        } catch (error) {
+            console.error('Erreur lors de l\'ouverture du scanner:', error);
+            this.scannerStatus.innerHTML = `
+                <div style="text-align: center; padding: 1rem;">
+                    <i class="fas fa-exclamation-triangle" style="font-size: 2rem; color: #dc3545; margin-bottom: 0.5rem; display: block;"></i>
+                    <p style="color: #dc3545; font-weight: 500; margin: 0;">Erreur d'accès à la caméra</p>
+                </div>
+            `;
+            
+            // Fermer automatiquement après 3 secondes
+            setTimeout(() => {
+                this.closeScanner();
+            }, 3000);
+        }
+    }
+
+    /**
+     * Ferme le modal scanner et arrête la caméra
+     */
+    closeScanner() {
+        this.scannerManager.stop();
+        
+        if (this.scannerModal) {
+            this.scannerModal.style.display = 'none';
+        }
+        
+        if (this.scannerStatus) {
+            this.scannerStatus.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> <span>Initialisation de la caméra...</span>';
+        }
+    }
+
+    /**
+     * Gère un code scanné avec succès
+     * @param {string} scannedCode - Code scanné
+     */
+    handleScannedCode(scannedCode) {
+        if (!scannedCode || !this.lancementInput) {
+            return;
+        }
+
+        try {
+            // Nettoyer le code scanné
+            let cleanCode = scannedCode.trim().replace(/[\s\-_\.]/g, '');
+            
+            // Si le code ne commence pas par "LT", l'ajouter
+            const upperCode = cleanCode.toUpperCase();
+            if (!upperCode.startsWith('LT')) {
+                if (/^\d+$/.test(cleanCode)) {
+                    cleanCode = 'LT' + cleanCode;
+                } else {
+                    cleanCode = 'LT' + cleanCode.replace(/LT/gi, '');
+                }
+            }
+            
+            cleanCode = cleanCode.toUpperCase();
+            
+            // Mettre le code dans le champ de saisie
+            this.lancementInput.value = cleanCode;
+            const normalizedCode = this.enforceNumericLancementInput();
+            this.handleLancementInput();
+            
+            // Notification de succès
+            this.notificationManager.success(`Code scanné: ${normalizedCode}`);
+            
+            // Valider automatiquement le lancement après un court délai
+            setTimeout(() => {
+                this.validateAndSelectLancement();
+            }, 500);
+            
+        } catch (error) {
+            console.error('Erreur lors du traitement du code scanné:', error);
+            this.notificationManager.error(`Erreur scan: ${error.message}`);
+        }
+    }
+
+    /**
+     * Gère les erreurs du scanner
+     * @param {string} errorMessage - Message d'erreur
+     * @param {Error} originalError - Erreur originale
+     */
+    handleScannerError(errorMessage, originalError) {
+        console.error('Erreur scanner:', errorMessage, originalError);
+        this.notificationManager.error(errorMessage);
+        this.closeScanner();
+    }
+
     // Afficher une notification spéciale pour l'admin
     showAdminNotification(comment, lancementCode) {
         // Créer une notification persistante et visible
@@ -1121,288 +1153,6 @@ class OperateurInterface {
         }, 30000);
     }
 
-    // ===== SCANNER DE CODE-BARRES =====
-    
-    async openScanner() {
-        if (!this.scannerModal) {
-            console.error('Modal scanner non trouvé');
-            return;
-        }
-        
-        this.scannerModal.style.display = 'flex';
-        this.scannerStatus.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> <span>Initialisation de la caméra...</span>';
-        
-        try {
-            // Vérifier si QuaggaJS est disponible
-            if (typeof Quagga === 'undefined') {
-                throw new Error('QuaggaJS n\'est pas chargé. Vérifiez votre connexion internet.');
-            }
-            
-            // Démarrer le scanner
-            await this.startBarcodeScanner();
-        } catch (error) {
-            console.error('Erreur lors de l\'ouverture du scanner:', error);
-            
-            let errorMessage = error.message || 'Erreur inconnue';
-            let userMessage = errorMessage;
-            
-            // Messages plus clairs pour l'utilisateur
-            if (errorMessage.includes('Permission')) {
-                userMessage = 'Permission d\'accès à la caméra requise. Veuillez autoriser l\'accès dans les paramètres de votre navigateur.';
-            } else if (errorMessage.includes('Aucune caméra')) {
-                userMessage = 'Aucune caméra détectée sur cet appareil. Veuillez connecter une caméra ou utiliser un autre appareil.';
-            } else if (errorMessage.includes('déjà utilisée')) {
-                userMessage = 'La caméra est déjà utilisée par une autre application. Veuillez fermer les autres applications utilisant la caméra.';
-            }
-            
-            this.scannerStatus.innerHTML = `
-                <div style="text-align: center; padding: 2rem;">
-                    <i class="fas fa-exclamation-triangle" style="font-size: 3rem; color: #dc3545; margin-bottom: 1rem; display: block;"></i>
-                    <p style="color: #dc3545; font-weight: 500; margin-bottom: 0.5rem;">Erreur d'accès à la caméra</p>
-                    <p style="color: #666; font-size: 0.9rem; margin: 0;">${userMessage}</p>
-                </div>
-            `;
-            
-            this.notificationManager.error(userMessage);
-            
-            // Fermer le scanner après un délai
-            setTimeout(() => {
-                this.closeScanner();
-            }, 5000);
-        }
-    }
-    
-    async startBarcodeScanner() {
-        // Vérifier si on est en HTTPS (requis pour getUserMedia sauf localhost)
-        const isSecureContext = location.protocol === 'https:' || 
-                                location.hostname === 'localhost' || 
-                                location.hostname === '127.0.0.1' ||
-                                location.hostname === '0.0.0.0' ||
-                                location.hostname.includes('localhost');
-        
-        if (!isSecureContext) {
-            throw new Error('L\'accès à la caméra nécessite une connexion HTTPS (sauf en localhost). Veuillez utiliser HTTPS ou tester en localhost.');
-        }
-        
-        // Ne pas vérifier l'API caméra de manière stricte - laisser QuaggaJS gérer
-        // QuaggaJS gère lui-même les fallbacks pour les différentes APIs (MediaDevices, getUserMedia, etc.)
-        // Cela évite les faux négatifs et les problèmes de compatibilité
-        
-        // Essayer différentes configurations de caméra
-        const cameraConfigs = [
-            { facingMode: "environment" }, // Caméra arrière (priorité pour mobile)
-            { facingMode: "user" },         // Caméra avant
-            {}                              // Aucune préférence (première caméra disponible)
-        ];
-        
-        let lastError = null;
-        
-        for (let i = 0; i < cameraConfigs.length; i++) {
-            try {
-                const config = cameraConfigs[i];
-                console.log(`Tentative ${i + 1}/${cameraConfigs.length} avec config:`, config);
-                
-                const result = await this.tryInitQuagga(config);
-                return result;
-            } catch (error) {
-                console.warn(`Tentative ${i + 1} échouée:`, error);
-                lastError = error;
-                
-                // Si c'est la dernière tentative, rejeter avec un message clair
-                if (i === cameraConfigs.length - 1) {
-                    let errorMessage = 'Impossible d\'accéder à la caméra. ';
-                    
-                    // Analyser le message d'erreur de Quagga
-                    const errorStr = error.toString().toLowerCase();
-                    const errorName = error.name || '';
-                    
-                    if (errorName === 'NotFoundError' || errorStr.includes('no camera') || errorStr.includes('aucune caméra')) {
-                        errorMessage += 'Aucune caméra disponible ou caméra déjà utilisée par une autre application.';
-                    } else if (errorName === 'NotAllowedError' || errorName === 'PermissionDeniedError' || errorStr.includes('permission') || errorStr.includes('refus')) {
-                        errorMessage += 'Permission d\'accès à la caméra refusée. Veuillez autoriser l\'accès à la caméra dans les paramètres de votre navigateur.';
-                    } else if (errorName === 'NotReadableError' || errorStr.includes('déjà utilisée') || errorStr.includes('already in use')) {
-                        errorMessage += 'La caméra est déjà utilisée par une autre application. Veuillez fermer les autres applications utilisant la caméra.';
-                    } else if (errorName === 'OverconstrainedError' || errorStr.includes('not supported')) {
-                        errorMessage += 'Les paramètres de la caméra ne sont pas supportés par cet appareil.';
-                    } else if (errorStr.includes('not supported') || errorStr.includes('n\'est pas supporté')) {
-                        errorMessage += 'L\'accès à la caméra n\'est pas supporté par ce navigateur. Veuillez utiliser un navigateur moderne (Chrome, Firefox, Safari, Edge).';
-                    } else {
-                        errorMessage += error.message || error.toString() || 'Erreur inconnue.';
-                    }
-                    
-                    throw new Error(errorMessage);
-                }
-            }
-        }
-    }
-    
-    async tryInitQuagga(constraints) {
-        return new Promise((resolve, reject) => {
-            // Configuration QuaggaJS pour les code-barres EAN, CODE128, etc.
-            try {
-                Quagga.init({
-                    inputStream: {
-                        name: "Live",
-                        type: "LiveStream",
-                        target: this.scannerViewport,
-                        constraints: {
-                            width: { min: 320, ideal: 640, max: 1280 },
-                            height: { min: 240, ideal: 480, max: 720 },
-                            ...constraints
-                        }
-                    },
-                    locator: {
-                        patchSize: "medium",
-                        halfSample: true
-                    },
-                    numOfWorkers: 2,
-                    decoder: {
-                        readers: [
-                            "code_128_reader",
-                            "ean_reader",
-                            "ean_8_reader",
-                            "code_39_reader",
-                            "code_39_vin_reader",
-                            "codabar_reader",
-                            "upc_reader",
-                            "upc_e_reader",
-                            "i2of5_reader"
-                        ]
-                    },
-                    locate: true
-                }, (err) => {
-                    if (err) {
-                        console.error('Erreur initialisation Quagga:', err);
-                        // Convertir l'erreur Quagga en erreur standardisée
-                        let error = err;
-                        if (typeof err === 'string') {
-                            error = new Error(err);
-                        } else if (err && err.message) {
-                            error = new Error(err.message);
-                            error.name = err.name || 'QuaggaError';
-                        } else if (err && err.toString) {
-                            error = new Error(err.toString());
-                        } else {
-                            error = new Error('Erreur lors de l\'initialisation du scanner');
-                        }
-                        reject(error);
-                        return;
-                    }
-                    
-                    console.log('Scanner initialisé avec succès');
-                    Quagga.start();
-                    this.scannerActive = true;
-                    this.scannerInstance = Quagga;
-                    
-                    this.scannerStatus.innerHTML = '<i class="fas fa-check-circle" style="color: green;"></i> <span style="color: green;">Caméra active - Scannez un code-barres</span>';
-                    
-                    // Écouter les résultats de scan
-                    Quagga.onDetected((result) => {
-                        if (result && result.codeResult && result.codeResult.code) {
-                            const scannedCode = result.codeResult.code.trim();
-                            console.log('Code scanné:', scannedCode);
-                            this.handleScannedCode(scannedCode);
-                        }
-                    });
-                    
-                    resolve();
-                });
-            } catch (error) {
-                // Capturer les erreurs synchrones lors de l'appel à Quagga.init
-                console.error('Erreur lors de l\'appel à Quagga.init:', error);
-                reject(error);
-            }
-        });
-    }
-    
-    handleScannedCode(scannedCode) {
-        // Empêcher les scans multiples rapides
-        if (this.isProcessingScan) {
-            console.log('Scan déjà en cours de traitement, ignoré');
-            return;
-        }
-        this.isProcessingScan = true;
-        
-        try {
-            // Nettoyer le code scanné (enlever les espaces, caractères spéciaux, etc.)
-            let cleanCode = scannedCode.trim().replace(/[\s\-_\.]/g, '');
-            
-            console.log('Code scanné brut:', scannedCode);
-            console.log('Code nettoyé:', cleanCode);
-            
-            // Validation basique : le code doit contenir au moins des caractères alphanumériques
-            if (!cleanCode || cleanCode.length < 3) {
-                throw new Error('Code scanné trop court ou invalide');
-            }
-            
-            // Si le code ne commence pas par "LT", l'ajouter
-            const upperCode = cleanCode.toUpperCase();
-            if (!upperCode.startsWith('LT')) {
-                // Si c'est juste des chiffres, ajouter "LT"
-                if (/^\d+$/.test(cleanCode)) {
-                    cleanCode = 'LT' + cleanCode;
-                } else if (upperCode.includes('LT')) {
-                    // Si "LT" est présent ailleurs, le déplacer au début
-                    cleanCode = 'LT' + cleanCode.replace(/LT/gi, '');
-                } else {
-                    // Sinon, ajouter "LT" au début
-                    cleanCode = 'LT' + cleanCode;
-                }
-            }
-            
-            // Normaliser en majuscules
-            cleanCode = cleanCode.toUpperCase();
-            
-            // Validation finale : format attendu LT + chiffres
-            if (!/^LT\d+$/.test(cleanCode)) {
-                console.warn('Format de code non standard:', cleanCode);
-                // On accepte quand même mais on log un avertissement
-            }
-            
-            console.log('Code final après traitement:', cleanCode);
-            
-            // Mettre le code dans le champ de saisie et le normaliser
-            this.lancementInput.value = cleanCode;
-            const normalizedCode = this.enforceNumericLancementInput();
-            this.handleLancementInput();
-            
-            // Fermer le scanner
-            this.closeScanner();
-            
-            // Notification de succès
-            this.notificationManager.success(`Code scanné: ${normalizedCode}`);
-            
-            // Valider automatiquement le lancement après un court délai
-            setTimeout(() => {
-                this.validateAndSelectLancement();
-                this.isProcessingScan = false;
-            }, 500);
-            
-        } catch (error) {
-            console.error('Erreur lors du traitement du code scanné:', error);
-            this.notificationManager.error(`Erreur scan: ${error.message}`);
-            this.isProcessingScan = false;
-            // Ne pas fermer le scanner en cas d'erreur pour permettre un nouveau scan
-        }
-    }
-    
-    closeScanner() {
-        if (this.scannerActive && this.scannerInstance) {
-            try {
-                this.scannerInstance.stop();
-                this.scannerInstance = null;
-                this.scannerActive = false;
-            } catch (error) {
-                console.error('Erreur lors de l\'arrêt du scanner:', error);
-            }
-        }
-        
-        if (this.scannerModal) {
-            this.scannerModal.style.display = 'none';
-        }
-        
-        this.scannerStatus.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> <span>Initialisation de la caméra...</span>';
-    }
 }
 
 export default OperateurInterface;

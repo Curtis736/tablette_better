@@ -230,7 +230,7 @@ body {
 .input-group input {
     width: 100%;
     padding: 15px 15px 15px 50px;
-    padding-right: 80px; /* Espace pour le bouton scanner (augmenté pour tablette) */
+    padding-right: 70px; /* Espace pour le bouton scanner */
     border: 2px solid #e1e5e9;
     border-radius: 10px;
     font-size: 1.1rem;
@@ -240,26 +240,39 @@ body {
     position: relative;
 }
 
-/* S'assurer que l'input ne bloque pas les clics sur le bouton scanner */
-.input-group input:not(:focus) {
-    pointer-events: auto;
-}
-
-/* Zone cliquable du bouton scanner - priorité absolue */
-.input-group #scanBarcodeBtn {
-    pointer-events: auto !important;
-}
-
-/* Zone de protection pour le bouton scanner - empêche l'input de capturer les clics */
-.input-group::after {
-    content: '';
+/* Bouton scanner dans l'input */
+.btn-scan {
     position: absolute;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    width: 90px;
-    z-index: 9999;
-    pointer-events: none;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 16px;
+    cursor: pointer;
+    font-size: 18px;
+    z-index: 10;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+    min-width: 48px;
+    min-height: 48px;
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.3);
+}
+
+.btn-scan:hover {
+    background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+    transform: translateY(-50%) scale(1.05);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-scan:active {
+    transform: translateY(-50%) scale(0.95);
 }
 
 .input-group input:focus {
@@ -1634,46 +1647,6 @@ tr:hover {
 
 /* ===== SCANNER DE CODE-BARRES ===== */
 
-/* Bouton scanner dans l'input */
-.btn-scan {
-    position: absolute !important;
-    right: 10px !important;
-    top: 50% !important;
-    transform: translateY(-50%) !important;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-    color: white !important;
-    border: none !important;
-    border-radius: 8px !important;
-    padding: 12px 18px !important;
-    cursor: pointer !important;
-    font-size: 18px !important;
-    z-index: 10000 !important;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    touch-action: manipulation !important;
-    pointer-events: auto !important;
-    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.3);
-    user-select: none !important;
-    min-width: 48px;
-    min-height: 48px;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-}
-
-.btn-scan:hover {
-    background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
-    transform: translateY(-50%) scale(1.05);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-
-.btn-scan:active {
-    transform: translateY(-50%) scale(0.95);
-}
-
 /* Modal scanner */
 .scanner-modal {
     display: none;
@@ -1682,7 +1655,7 @@ tr:hover {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.9);
+    background: rgba(0, 0, 0, 0.95);
     z-index: 10000;
     justify-content: center;
     align-items: center;
@@ -1698,6 +1671,7 @@ tr:hover {
     display: flex;
     flex-direction: column;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
 }
 
 .scanner-modal-header {
@@ -1708,7 +1682,6 @@ tr:hover {
     border-bottom: 2px solid #e1e5e9;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    border-radius: 20px 20px 0 0;
 }
 
 .scanner-modal-header h2 {
@@ -1724,19 +1697,25 @@ tr:hover {
     border: none;
     color: white;
     font-size: 24px;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all 0.3s ease;
+    min-width: 44px;
+    min-height: 44px;
 }
 
 .btn-close-scanner:hover {
     background: rgba(255, 255, 255, 0.3);
     transform: scale(1.1);
+}
+
+.btn-close-scanner:active {
+    transform: scale(0.95);
 }
 
 .scanner-modal-body {
@@ -1754,24 +1733,18 @@ tr:hover {
     background: #000;
     border-radius: 10px;
     overflow: hidden;
+    aspect-ratio: 4 / 3;
 }
 
-.scanner-viewport {
-    width: 100%;
-    height: 0;
-    padding-bottom: 75%; /* Ratio 4:3 */
-    position: relative;
-    background: #000;
-}
-
-.scanner-viewport video,
-.scanner-viewport canvas {
-    position: absolute;
-    top: 0;
-    left: 0;
+.scanner-video {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    display: block;
+}
+
+.scanner-canvas {
+    display: none;
 }
 
 .scanner-overlay {
@@ -1787,31 +1760,51 @@ tr:hover {
     justify-content: center;
 }
 
-.scanner-line {
+.scanner-frame {
     width: 80%;
-    height: 3px;
-    background: linear-gradient(90deg, transparent, #00ff00, transparent);
-    animation: scanLine 2s linear infinite;
-    box-shadow: 0 0 10px #00ff00;
+    max-width: 400px;
+    height: 200px;
+    border: 3px solid #00ff00;
+    border-radius: 10px;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5),
+                0 0 20px rgba(0, 255, 0, 0.5);
+    position: relative;
 }
 
-@keyframes scanLine {
-    0% {
-        transform: translateY(-50%);
-    }
-    100% {
-        transform: translateY(calc(100% + 50%));
-    }
+.scanner-frame::before,
+.scanner-frame::after {
+    content: '';
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    border: 3px solid #00ff00;
+}
+
+.scanner-frame::before {
+    top: -3px;
+    left: -3px;
+    border-right: none;
+    border-bottom: none;
+}
+
+.scanner-frame::after {
+    bottom: -3px;
+    right: -3px;
+    border-left: none;
+    border-top: none;
 }
 
 .scanner-instructions {
     color: white;
     background: rgba(0, 0, 0, 0.7);
-    padding: 10px 20px;
+    padding: 12px 20px;
     border-radius: 20px;
     margin-top: 20px;
     font-size: 1rem;
     text-align: center;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .scanner-status {
@@ -1823,6 +1816,7 @@ tr:hover {
     align-items: center;
     justify-content: center;
     gap: 10px;
+    min-height: 50px;
 }
 
 .scanner-status i {
@@ -1836,8 +1830,8 @@ tr:hover {
         max-height: 95vh;
     }
     
-    .scanner-viewport {
-        padding-bottom: 100%; /* Ratio carré sur mobile */
+    .scanner-container {
+        aspect-ratio: 1 / 1;
     }
     
     .scanner-modal-header {
@@ -1848,38 +1842,39 @@ tr:hover {
         font-size: 1.2rem;
     }
     
-    /* Amélioration du bouton scanner sur tablette */
     .btn-scan {
-        padding: 14px 20px;
+        padding: 14px 18px;
         min-width: 56px;
         min-height: 56px;
         font-size: 20px;
-        z-index: 10000 !important;
-        right: 5px !important;
+        right: 5px;
     }
     
     .input-group input {
-        padding-right: 85px;
-        pointer-events: auto;
+        padding-right: 75px;
     }
 }
 
 /* Amélioration tactile pour toutes les tablettes */
 @media (hover: none) and (pointer: coarse) {
     .btn-scan {
-        padding: 14px 20px;
+        padding: 14px 18px;
         min-width: 56px;
         min-height: 56px;
-        z-index: 10000 !important;
-        right: 5px !important;
+        font-size: 20px;
     }
     
     .input-group input {
-        padding-right: 85px;
+        padding-right: 75px;
     }
     
     .btn-scan:active {
         transform: translateY(-50%) scale(0.9);
         background: linear-gradient(135deg, #5568d3 0%, #653a8f 100%);
+    }
+    
+    .btn-close-scanner {
+        min-width: 48px;
+        min-height: 48px;
     }
 }

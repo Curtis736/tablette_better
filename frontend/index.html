@@ -7,8 +7,8 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📱</text></svg>">
     <link rel="stylesheet" href="assets/styles.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <!-- QuaggaJS pour le scan de code-barres -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <!-- ZXing pour le scan de code-barres -->
+    <script src="https://cdn.jsdelivr.net/npm/@zxing/library@latest"></script>
 </head>
 <body>
     <div id="app">
@@ -98,13 +98,13 @@
                             maxlength="10"
                             aria-label="Saisir les chiffres du code de lancement"
                         >
-                        <button id="scanBarcodeBtn" class="btn-scan" title="Scanner un code-barres">
+                        <button id="scanBarcodeBtn" class="btn-scan" title="Scanner un code-barres" aria-label="Scanner un code-barres">
                             <i class="fas fa-camera"></i>
                         </button>
                     </div>
                     <div id="lancementList" class="lancement-list" style="display: none;"></div>
                     <div class="help-text">
-                        <small><i class="fas fa-info-circle"></i> "LT" est pré-rempli, saisissez seulement les chiffres (ex: LT2501145) ou utilisez le scanner</small>
+                        <small><i class="fas fa-info-circle"></i> "LT" est pré-rempli, saisissez seulement les chiffres (ex: LT2501145)</small>
                     </div>
                 </div>
 
@@ -342,21 +342,28 @@
         </div>
     </div>
 
-    <!-- Modal pour le scanner de code-barres -->
-    <div id="barcodeScannerModal" class="scanner-modal" style="display: none;">
+    <!-- Modal Scanner de Code-Barres -->
+    <div id="barcodeScannerModal" class="scanner-modal" role="dialog" aria-labelledby="scannerModalTitle" aria-modal="true">
         <div class="scanner-modal-content">
             <div class="scanner-modal-header">
-                <h2><i class="fas fa-camera"></i> Scanner un code-barres</h2>
-                <button id="closeScannerBtn" class="btn-close-scanner">
+                <h2 id="scannerModalTitle">
+                    <i class="fas fa-camera"></i>
+                    Scanner un code-barres
+                </h2>
+                <button id="closeScannerBtn" class="btn-close-scanner" aria-label="Fermer le scanner">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <div class="scanner-modal-body">
-                <div id="scannerContainer" class="scanner-container">
-                    <div id="scannerViewport" class="scanner-viewport"></div>
+                <div class="scanner-container">
+                    <video id="scannerVideo" class="scanner-video" autoplay playsinline></video>
+                    <canvas id="scannerCanvas" class="scanner-canvas"></canvas>
                     <div class="scanner-overlay">
-                        <div class="scanner-line"></div>
-                        <p class="scanner-instructions">Positionnez le code-barres dans le cadre</p>
+                        <div class="scanner-frame"></div>
+                        <p class="scanner-instructions">
+                            <i class="fas fa-info-circle"></i>
+                            Positionnez le code-barres dans le cadre
+                        </p>
                     </div>
                 </div>
                 <div id="scannerStatus" class="scanner-status">
