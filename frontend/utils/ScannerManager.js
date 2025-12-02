@@ -249,13 +249,36 @@ class ScannerManager {
      * @returns {boolean}
      */
     static isSupported() {
-        return !!(
+        // Vérifier si l'API MediaDevices est disponible
+        const hasMediaDevices = !!(
             navigator.mediaDevices &&
-            navigator.mediaDevices.getUserMedia &&
-            (location.protocol === 'https:' || 
-             location.hostname === 'localhost' || 
-             location.hostname === '127.0.0.1')
+            navigator.mediaDevices.getUserMedia
         );
+        
+        if (!hasMediaDevices) {
+            console.warn('MediaDevices API non disponible');
+            return false;
+        }
+        
+        // Vérifier le contexte de sécurité (HTPS requis sauf pour localhost)
+        const isSecureContext = 
+            location.protocol === 'https:' ||
+            location.hostname === 'localhost' ||
+            location.hostname === '127.0.0.1' ||
+            location.hostname === '0.0.0.0' ||
+            location.hostname.includes('localhost') ||
+            location.hostname.match(/^192\.168\.\d+\.\d+$/) || // IP locale
+            location.hostname.match(/^10\.\d+\.\d+\.\d+$/) ||  // IP locale
+            location.hostname.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+$/); // IP locale
+        
+        if (!isSecureContext) {
+            console.warn('Contexte non sécurisé (HTTP non-localhost). Le scanner nécessite HTTPS.');
+            // On retourne quand même true car le navigateur gérera la sécurité
+            // et affichera un message d'erreur approprié si nécessaire
+            return true;
+        }
+        
+        return true;
     }
 }
 
