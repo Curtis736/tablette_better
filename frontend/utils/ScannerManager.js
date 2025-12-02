@@ -249,26 +249,42 @@ class ScannerManager {
      * @returns {boolean}
      */
     static isSupported() {
-        // Vérifier si l'API MediaDevices est disponible
-        const hasMediaDevices = !!(
+        console.log('🔍 Vérification support scanner:');
+        console.log('  - navigator:', typeof navigator);
+        console.log('  - navigator.mediaDevices:', typeof navigator.mediaDevices);
+        console.log('  - navigator.getUserMedia:', typeof navigator.getUserMedia);
+        console.log('  - navigator.webkitGetUserMedia:', typeof navigator.webkitGetUserMedia);
+        console.log('  - navigator.mozGetUserMedia:', typeof navigator.mozGetUserMedia);
+        console.log('  - Protocol:', location.protocol);
+        console.log('  - Hostname:', location.hostname);
+        
+        // Vérifier l'API MediaDevices moderne
+        const hasModernAPI = !!(
             navigator.mediaDevices &&
             navigator.mediaDevices.getUserMedia
         );
         
-        console.log('🔍 Vérification support scanner:');
-        console.log('  - MediaDevices:', !!navigator.mediaDevices);
-        console.log('  - getUserMedia:', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
-        console.log('  - Protocol:', location.protocol);
-        console.log('  - Hostname:', location.hostname);
+        // Vérifier les APIs legacy
+        const hasLegacyAPI = !!(
+            navigator.getUserMedia ||
+            navigator.webkitGetUserMedia ||
+            navigator.mozGetUserMedia ||
+            navigator.msGetUserMedia
+        );
         
-        if (!hasMediaDevices) {
-            console.warn('❌ MediaDevices API non disponible');
+        console.log('  - API moderne (MediaDevices):', hasModernAPI);
+        console.log('  - API legacy (getUserMedia):', hasLegacyAPI);
+        
+        // Si au moins une API est disponible, on considère que c'est supporté
+        const isSupported = hasModernAPI || hasLegacyAPI;
+        
+        if (!isSupported) {
+            console.warn('❌ Aucune API caméra disponible');
             return false;
         }
         
-        // Toujours retourner true si MediaDevices est disponible
+        // Toujours retourner true si une API est disponible
         // Le navigateur gérera lui-même les restrictions de sécurité
-        // et affichera un message d'erreur approprié si nécessaire
         console.log('✅ Scanner supporté');
         return true;
     }
