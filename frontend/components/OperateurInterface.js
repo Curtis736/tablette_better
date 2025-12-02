@@ -120,6 +120,18 @@ class OperateurInterface {
             // Forcer le clavier numérique et interdire les caractères non numériques
             this.lancementInput.addEventListener('keydown', (event) => this.handleLancementKeydown(event));
             this.lancementInput.addEventListener('paste', (event) => this.handleLancementPaste(event));
+            
+            // Empêcher l'input de capturer les événements sur la zone du bouton scanner
+            this.lancementInput.addEventListener('click', (e) => {
+                const rect = this.lancementInput.getBoundingClientRect();
+                const btnRect = this.scanBarcodeBtn ? this.scanBarcodeBtn.getBoundingClientRect() : null;
+                
+                if (btnRect && e.clientX >= btnRect.left && e.clientX <= btnRect.right &&
+                    e.clientY >= btnRect.top && e.clientY <= btnRect.bottom) {
+                    e.stopPropagation();
+                    // Laisser le bouton gérer le clic
+                }
+            });
         }
         
         // Contrôles de lancement
@@ -137,16 +149,25 @@ class OperateurInterface {
         // Scanner de code-barres
         if (this.scanBarcodeBtn) {
             // Support pour les événements tactiles (tablettes/mobiles)
-            this.scanBarcodeBtn.addEventListener('click', (e) => {
+            const handleScanClick = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                e.stopImmediatePropagation();
+                console.log('Bouton scanner cliqué/touché');
                 this.openScanner();
-            });
-            this.scanBarcodeBtn.addEventListener('touchstart', (e) => {
+            };
+            
+            this.scanBarcodeBtn.addEventListener('click', handleScanClick, { passive: false, capture: true });
+            this.scanBarcodeBtn.addEventListener('touchstart', handleScanClick, { passive: false, capture: true });
+            this.scanBarcodeBtn.addEventListener('touchend', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                this.openScanner();
-            });
+            }, { passive: false });
+            
+            // Debug: vérifier que le bouton est bien accessible
+            console.log('Bouton scanner initialisé:', this.scanBarcodeBtn);
+        } else {
+            console.error('Bouton scanner introuvable!');
         }
         if (this.closeScannerBtn) {
             this.closeScannerBtn.addEventListener('click', () => this.closeScanner());
@@ -1091,27 +1112,59 @@ class OperateurInterface {
     }
     
     async startBarcodeScanner() {
-        // Vérifier si l'API MediaDevices est disponible
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        // Vérifier si l'API MediaDevices est disponible (avec fallback pour anciens navigateurs)
+        const hasMediaDevices = navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+        const hasLegacyGetUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+        
+        if (!hasMediaDevices && !hasLegacyGetUserMedia) {
             throw new Error('L\'accès à la caméra n\'est pas supporté par ce navigateur. Veuillez utiliser un navigateur moderne (Chrome, Firefox, Safari, Edge).');
+        }
+        
+        // Vérifier si on est en HTTPS (requis pour getUserMedia sauf localhost)
+        if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+            throw new Error('L\'accès à la caméra nécessite une connexion HTTPS. Veuillez utiliser https:// ou contacter l\'administrateur.');
         }
         
         // Demander les permissions et vérifier les caméras disponibles
         try {
-            // Demander l'accès à la caméra pour obtenir les permissions
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            // Libérer immédiatement le stream, on va le récupérer via Quagga
-            stream.getTracks().forEach(track => track.stop());
-            
-            // Maintenant on peut énumérer les devices
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const videoDevices = devices.filter(device => device.kind === 'videoinput');
-            
-            if (videoDevices.length === 0) {
-                throw new Error('Aucune caméra détectée sur cet appareil');
+            // Utiliser l'API moderne si disponible, sinon fallback
+            let getUserMediaFunc;
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                getUserMediaFunc = (constraints) => navigator.mediaDevices.getUserMedia(constraints);
+            } else if (navigator.getUserMedia) {
+                getUserMediaFunc = (constraints) => new Promise((resolve, reject) => {
+                    navigator.getUserMedia(constraints, resolve, reject);
+                });
+            } else if (navigator.webkitGetUserMedia) {
+                getUserMediaFunc = (constraints) => new Promise((resolve, reject) => {
+                    navigator.webkitGetUserMedia(constraints, resolve, reject);
+                });
+            } else {
+                throw new Error('API de caméra non disponible');
             }
             
-            console.log(`${videoDevices.length} caméra(s) disponible(s)`);
+            // Demander l'accès à la caméra pour obtenir les permissions
+            const stream = await getUserMediaFunc({ video: true });
+            // Libérer immédiatement le stream, on va le récupérer via Quagga
+            if (stream && stream.getTracks) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            
+            // Maintenant on peut énumérer les devices (si l'API est disponible)
+            if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+                try {
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                    
+                    if (videoDevices.length === 0) {
+                        console.warn('Aucune caméra détectée via enumerateDevices');
+                    } else {
+                        console.log(`${videoDevices.length} caméra(s) disponible(s)`);
+                    }
+                } catch (enumError) {
+                    console.warn('Impossible d\'énumérer les devices:', enumError);
+                }
+            }
         } catch (error) {
             // Si c'est une erreur de permission, on la gère plus tard
             if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
