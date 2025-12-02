@@ -25,6 +25,20 @@ class ScannerManager {
     }
 
     /**
+     * Vérifie si ZXing est chargé
+     * @returns {Promise<boolean>}
+     */
+    async waitForZXing(maxAttempts = 10) {
+        for (let i = 0; i < maxAttempts; i++) {
+            if (typeof ZXing !== 'undefined' && ZXing.BrowserMultiFormatReader) {
+                return true;
+            }
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        return false;
+    }
+
+    /**
      * Démarre le scanner avec accès à la caméra
      * @param {HTMLElement} videoElement - Élément video pour afficher le flux caméra
      * @param {HTMLElement} canvasElement - Élément canvas pour l'analyse d'image
@@ -41,6 +55,12 @@ class ScannerManager {
         this.ctx = canvasElement.getContext('2d');
 
         try {
+            // Attendre que ZXing soit chargé
+            const zxingLoaded = await this.waitForZXing();
+            if (!zxingLoaded) {
+                throw new Error('ZXing-js n\'est pas chargé. Vérifiez votre connexion internet et rechargez la page.');
+            }
+
             // Demander l'accès à la caméra
             const constraints = {
                 video: {
