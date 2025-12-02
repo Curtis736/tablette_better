@@ -61,16 +61,50 @@ class ScannerManager {
                 throw new Error('ZXing-js n\'est pas chargé. Vérifiez votre connexion internet et rechargez la page.');
             }
 
-            // Demander l'accès à la caméra
-            const constraints = {
-                video: {
-                    facingMode: 'environment', // Caméra arrière sur mobile/tablette
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                }
-            };
+            // Détecter quelle API utiliser
+            let getUserMediaFunc;
+            
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                // API moderne
+                getUserMediaFunc = (constraints) => navigator.mediaDevices.getUserMedia(constraints);
+            } else if (navigator.getUserMedia) {
+                // API legacy standard
+                getUserMediaFunc = (constraints) => new Promise((resolve, reject) => {
+                    navigator.getUserMedia(constraints, resolve, reject);
+                });
+            } else if (navigator.webkitGetUserMedia) {
+                // API legacy WebKit
+                getUserMediaFunc = (constraints) => new Promise((resolve, reject) => {
+                    navigator.webkitGetUserMedia(constraints, resolve, reject);
+                });
+            } else if (navigator.mozGetUserMedia) {
+                // API legacy Mozilla
+                getUserMediaFunc = (constraints) => new Promise((resolve, reject) => {
+                    navigator.mozGetUserMedia(constraints, resolve, reject);
+                });
+            } else {
+                throw new Error('Aucune API d\'accès à la caméra disponible. Vérifiez que vous utilisez un navigateur moderne.');
+            }
 
-            this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+            // Préparer les contraintes selon l'API utilisée
+            let constraints;
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                // API moderne - contraintes complètes
+                constraints = {
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                };
+            } else {
+                // API legacy - contraintes simplifiées
+                constraints = {
+                    video: true
+                };
+            }
+
+            this.stream = await getUserMediaFunc(constraints);
             
             // Afficher le flux vidéo
             this.videoElement.srcObject = this.stream;
