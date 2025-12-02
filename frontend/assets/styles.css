@@ -225,12 +225,13 @@ body {
     transform: translateY(-50%);
     color: #666;
     font-size: 1.1rem;
+    z-index: 2;
+    pointer-events: none;
 }
 
 .input-group input {
     width: 100%;
     padding: 15px 15px 15px 50px;
-    padding-right: 70px; /* Espace pour le bouton scanner */
     border: 2px solid #e1e5e9;
     border-radius: 10px;
     font-size: 1.1rem;
@@ -238,6 +239,11 @@ body {
     pointer-events: auto;
     z-index: 1;
     position: relative;
+}
+
+/* Espace pour le bouton scanner uniquement dans l'input de lancement */
+.input-group.with-scanner input {
+    padding-right: 70px;
 }
 
 /* Bouton scanner dans l'input */
