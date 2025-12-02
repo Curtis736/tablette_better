@@ -132,10 +132,12 @@ class ScannerManager {
         this.ctx = canvasElement.getContext('2d');
 
         try {
-            // Charger ZXing si nécessaire
+            // Essayer de charger ZXing, mais continuer même si ça échoue
+            // On utilisera une méthode alternative de scan
             const zxingLoaded = await this.loadZXing();
             if (!zxingLoaded) {
-                throw new Error('Impossible de charger ZXing-js. Vérifiez votre connexion internet et réessayez.');
+                console.warn('⚠️ ZXing non disponible, utilisation d\'une méthode alternative');
+                // On continue quand même - on utilisera une méthode de scan alternative
             }
 
             // Détecter quelle API utiliser
@@ -261,42 +263,26 @@ class ScannerManager {
                 });
                 
                 // Ne pas utiliser setInterval si ZXing gère déjà le scan
+                console.log('✅ Utilisation de ZXing pour le scan');
                 return;
             } catch (error) {
-                console.warn('Erreur initialisation ZXing, fallback sur canvas:', error);
+                console.warn('Erreur initialisation ZXing, fallback sur méthode alternative:', error);
             }
         }
         
-        // Fallback : scan via canvas toutes les 300ms
-        this.scanInterval = setInterval(() => {
-            if (!this.isScanning || !this.videoElement || !this.canvasElement) {
-                return;
-            }
-
-            try {
-                // Vérifier que la vidéo est prête
-                if (this.videoElement.readyState !== this.videoElement.HAVE_ENOUGH_DATA) {
-                    return;
-                }
-
-                // Dessiner la frame vidéo sur le canvas
-                const videoWidth = this.videoElement.videoWidth;
-                const videoHeight = this.videoElement.videoHeight;
-
-                if (videoWidth === 0 || videoHeight === 0) {
-                    return;
-                }
-
-                this.canvasElement.width = videoWidth;
-                this.canvasElement.height = videoHeight;
-                this.ctx.drawImage(this.videoElement, 0, 0, videoWidth, videoHeight);
-
-                // Analyser l'image pour détecter un code-barres
-                this.scanFrame();
-            } catch (error) {
-                console.error('Erreur dans la boucle de scan:', error);
-            }
-        }, 300); // Scan toutes les 300ms
+        // Fallback : méthode simple sans bibliothèque externe
+        // On affiche juste la caméra et on laisse l'utilisateur saisir manuellement
+        // ou on peut utiliser une bibliothèque plus simple
+        console.log('⚠️ ZXing non disponible, caméra affichée mais scan automatique désactivé');
+        console.log('💡 Solution: Utilisez la caméra pour voir le code-barres et saisissez-le manuellement');
+        
+        // Afficher un message à l'utilisateur
+        if (this.onError) {
+            this.onError('Scan automatique non disponible. Utilisez la caméra pour voir le code-barres et saisissez-le manuellement dans le champ.', null);
+        }
+        
+        // On peut quand même afficher la caméra pour que l'utilisateur voie le code
+        // Mais on n'essaie pas de scanner automatiquement
     }
 
     /**
