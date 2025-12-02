@@ -285,25 +285,27 @@ class ScannerManager {
     static isSupported() {
         console.log('🔍 Vérification support scanner:');
         console.log('  - navigator:', typeof navigator);
-        console.log('  - navigator.mediaDevices:', typeof navigator.mediaDevices);
+        console.log('  - navigator.mediaDevices:', typeof navigator.mediaDevices, navigator.mediaDevices);
         console.log('  - navigator.getUserMedia:', typeof navigator.getUserMedia);
         console.log('  - navigator.webkitGetUserMedia:', typeof navigator.webkitGetUserMedia);
         console.log('  - navigator.mozGetUserMedia:', typeof navigator.mozGetUserMedia);
+        console.log('  - navigator.msGetUserMedia:', typeof navigator.msGetUserMedia);
         console.log('  - Protocol:', location.protocol);
         console.log('  - Hostname:', location.hostname);
+        console.log('  - User Agent:', navigator.userAgent);
         
         // Vérifier l'API MediaDevices moderne
         const hasModernAPI = !!(
             navigator.mediaDevices &&
-            navigator.mediaDevices.getUserMedia
+            typeof navigator.mediaDevices.getUserMedia === 'function'
         );
         
         // Vérifier les APIs legacy
         const hasLegacyAPI = !!(
-            navigator.getUserMedia ||
-            navigator.webkitGetUserMedia ||
-            navigator.mozGetUserMedia ||
-            navigator.msGetUserMedia
+            (navigator.getUserMedia && typeof navigator.getUserMedia === 'function') ||
+            (navigator.webkitGetUserMedia && typeof navigator.webkitGetUserMedia === 'function') ||
+            (navigator.mozGetUserMedia && typeof navigator.mozGetUserMedia === 'function') ||
+            (navigator.msGetUserMedia && typeof navigator.msGetUserMedia === 'function')
         );
         
         console.log('  - API moderne (MediaDevices):', hasModernAPI);
@@ -314,12 +316,19 @@ class ScannerManager {
         
         if (!isSupported) {
             console.warn('❌ Aucune API caméra disponible');
+            console.warn('   Détails:', {
+                mediaDevices: !!navigator.mediaDevices,
+                getUserMedia: !!navigator.getUserMedia,
+                webkit: !!navigator.webkitGetUserMedia,
+                moz: !!navigator.mozGetUserMedia,
+                ms: !!navigator.msGetUserMedia
+            });
             return false;
         }
         
         // Toujours retourner true si une API est disponible
         // Le navigateur gérera lui-même les restrictions de sécurité
-        console.log('✅ Scanner supporté');
+        console.log('✅ Scanner supporté (API disponible)');
         return true;
     }
 }
