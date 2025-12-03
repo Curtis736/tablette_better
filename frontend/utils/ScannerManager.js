@@ -131,14 +131,22 @@ class ScannerManager {
         this.canvasElement = canvasElement;
         this.ctx = canvasElement.getContext('2d');
 
+        // Essayer de charger ZXing, mais continuer même si ça échoue
+        // La caméra sera affichée pour permettre la saisie manuelle
+        let zxingLoaded = false;
         try {
-            // Essayer de charger ZXing, mais continuer même si ça échoue
-            // On utilisera une méthode alternative de scan
-            const zxingLoaded = await this.loadZXing();
-            if (!zxingLoaded) {
-                console.warn('⚠️ ZXing non disponible, utilisation d\'une méthode alternative');
-                // On continue quand même - on utilisera une méthode de scan alternative
-            }
+            zxingLoaded = await this.loadZXing();
+        } catch (error) {
+            console.warn('⚠️ Erreur lors du chargement de ZXing:', error);
+            zxingLoaded = false;
+        }
+        
+        if (!zxingLoaded) {
+            console.warn('⚠️ ZXing non disponible - la caméra sera affichée pour saisie manuelle');
+            // On continue quand même - la caméra sera affichée
+        }
+
+        try {
 
             // Détecter quelle API utiliser
             let getUserMediaFunc;
@@ -195,6 +203,18 @@ class ScannerManager {
             console.log('✅ Scanner démarré avec succès');
         } catch (error) {
             console.error('Erreur démarrage scanner:', error);
+            
+            // Ne pas relancer l'erreur si c'est juste ZXing qui n'est pas chargé
+            // La caméra peut quand même être affichée pour saisie manuelle
+            const errorMessage = error.message || error.toString() || '';
+            if (errorMessage.includes('ZXing') || errorMessage.includes('Impossible de charger')) {
+                console.warn('⚠️ ZXing non disponible, mais on continue pour afficher la caméra');
+                // On ne relance pas l'erreur - la caméra devrait déjà être démarrée
+                // Si ce n'est pas le cas, c'est une vraie erreur de caméra
+                return;
+            }
+            
+            // Pour les autres erreurs (caméra, etc.), on les gère normalement
             this.handleError(error);
             throw error;
         }
