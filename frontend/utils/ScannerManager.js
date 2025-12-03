@@ -147,30 +147,59 @@ class ScannerManager {
         }
 
         try {
-
-            // Détecter quelle API utiliser
+            // Détecter quelle API utiliser - vérification plus robuste
             let getUserMediaFunc;
             
-            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                // API moderne
+            // Vérifier d'abord l'API moderne
+            if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
                 getUserMediaFunc = (constraints) => navigator.mediaDevices.getUserMedia(constraints);
-            } else if (navigator.getUserMedia) {
-                // API legacy standard
+            } 
+            // Vérifier les APIs legacy avec des vérifications plus strictes
+            else if (navigator.getUserMedia && typeof navigator.getUserMedia === 'function') {
                 getUserMediaFunc = (constraints) => new Promise((resolve, reject) => {
                     navigator.getUserMedia(constraints, resolve, reject);
                 });
-            } else if (navigator.webkitGetUserMedia) {
-                // API legacy WebKit
+            } 
+            else if (navigator.webkitGetUserMedia && typeof navigator.webkitGetUserMedia === 'function') {
                 getUserMediaFunc = (constraints) => new Promise((resolve, reject) => {
                     navigator.webkitGetUserMedia(constraints, resolve, reject);
                 });
-            } else if (navigator.mozGetUserMedia) {
-                // API legacy Mozilla
+            } 
+            else if (navigator.mozGetUserMedia && typeof navigator.mozGetUserMedia === 'function') {
                 getUserMediaFunc = (constraints) => new Promise((resolve, reject) => {
                     navigator.mozGetUserMedia(constraints, resolve, reject);
                 });
-            } else {
-                throw new Error('Aucune API d\'accès à la caméra disponible. Vérifiez que vous utilisez un navigateur moderne.');
+            }
+            // Vérifier aussi dans window pour certains navigateurs
+            else if (window.navigator && window.navigator.mediaDevices && typeof window.navigator.mediaDevices.getUserMedia === 'function') {
+                getUserMediaFunc = (constraints) => window.navigator.mediaDevices.getUserMedia(constraints);
+            }
+            // Si aucune API n'est trouvée directement, essayer quand même
+            // Le navigateur peut avoir des APIs non standard ou le contexte peut changer
+            else {
+                console.warn('⚠️ Aucune API caméra détectée directement, tentative avec mediaDevices...');
+                
+                // Essayer d'accéder à getUserMedia même s'il n'est pas encore défini
+                if (navigator.mediaDevices) {
+                    getUserMediaFunc = async (constraints) => {
+                        // Attendre un peu que l'API soit disponible
+                        for (let i = 0; i < 10; i++) {
+                            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                                return navigator.mediaDevices.getUserMedia(constraints);
+                            }
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                        }
+                        // Si toujours pas disponible, essayer quand même (peut fonctionner)
+                        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                            return navigator.mediaDevices.getUserMedia(constraints);
+                        }
+                        throw new Error('API getUserMedia non disponible après attente');
+                    };
+                } else {
+                    // Dernière tentative : essayer d'accéder directement à getUserMedia
+                    // Certains navigateurs peuvent avoir l'API mais pas la détecter
+                    throw new Error('Aucune API d\'accès à la caméra détectée. Vérifiez que vous utilisez un navigateur moderne (Chrome, Firefox, Safari, Edge) et que vous êtes en HTTPS ou localhost.');
+                }
             }
 
             // Préparer les contraintes selon l'API utilisée
