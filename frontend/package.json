@@ -4,12 +4,28 @@
   "description": "Interface frontend pour la tablette SEDI",
   "scripts": {
     "start": "npx http-server . -p 8080 --cors -o",
-    "dev": "npx http-server . -p 8080 --cors -o"
+    "dev": "npx http-server . -p 8080 --cors -o",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:ui": "vitest --ui",
+    "test:watch": "vitest --watch"
   },
-  "keywords": ["sedi", "frontend", "tablette"],
+  "keywords": [
+    "sedi",
+    "frontend",
+    "tablette"
+  ],
   "author": "SEDI",
   "license": "MIT",
   "devDependencies": {
-    "http-server": "^14.1.1"
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@vitest/coverage-v8": "^4.0.15",
+    "@vitest/ui": "^4.0.15",
+    "happy-dom": "^20.0.11",
+    "http-server": "^14.1.1",
+    "jsdom": "^27.2.0",
+    "vitest": "^4.0.15"
   }
 }

@@ -146,8 +146,8 @@ app.get('/', (req, res) => {
     });
 });
 
-// Gestion des erreurs 404
-app.use('*', (req, res) => {
+// Gestion des erreurs 404 - catch-all pour Express 5
+app.use((req, res) => {
     res.status(404).json({ 
         error: 'Endpoint non trouvé',
         path: req.originalUrl
